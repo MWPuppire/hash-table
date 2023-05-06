@@ -1,4 +1,3 @@
-#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -34,8 +33,10 @@ static size_t ht_hash(const char *s, size_t cap) {
 	int shift = 64 - __builtin_ctz(cap);
 	size_t hash = 0;
 	size_t len = strlen(s);
+	size_t mult = 1;
 	for (size_t i = 0; i < len; i++) {
-		hash += (long) pow(HT_PRIME, len - (i + 1)) * s[i];
+		hash += mult * s[i];
+		mult *= HT_PRIME;
 	}
 	return (hash * FIB_MULT) >> shift;
 }

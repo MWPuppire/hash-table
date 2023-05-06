@@ -29,12 +29,14 @@ int main(int argc, char *argv[]) {
 	assert(strcmp("key", ht_search(table, "test")) == 0);
 	// table automatically resizes as needed
 	char base_buf[8] = { 'k', 'e', 'y', 0, 0, 0, 0, 0 };
+	char val_buf[8] = { 'v', 'a', 'l', 0, 0, 0, 0, 0 };
 	for (int i = 0; i < 1000; i++) {
 		sprintf(base_buf + 3, "%d", i);
-		ht_insert_unique(table, base_buf, base_buf);
+		sprintf(val_buf + 3, "%d", i);
+		ht_insert_unique(table, base_buf, val_buf);
 	}
-	assert(strcmp("key0", ht_search(table, "key0")) == 0);
-	assert(strcmp("key999", ht_search(table, "key999")) == 0);
+	assert(strcmp("val0", ht_search(table, "key0")) == 0);
+	assert(strcmp("val999", ht_search(table, "key999")) == 0);
 
 	return 0;
 }
