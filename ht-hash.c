@@ -41,13 +41,14 @@ static size_t ht_hash(const char *s, size_t cap) {
 	return (hash * FIB_MULT) >> shift;
 }
 
-static bool ht_find(ht_hash_table *ht, const char *key, size_t *out_index) {
+static bool ht_find(const ht_hash_table *ht, const char *key, size_t *out_index) {
 	size_t cap = ht->capacity;
 	size_t index = ht_hash(key, cap);
+	size_t len = strlen(key);
 	if (ht->items[index].key != NULL) {
 		size_t attempts = 0;
 		while (ht->items[index].key != NULL) {
-			if (strcmp(ht->items[index].key, key) == 0) {
+			if (strncmp(ht->items[index].key, key, len) == 0) {
 				*out_index = index;
 				return true;
 			}
@@ -72,7 +73,7 @@ static void ht_insert_inner(struct _ht_item *items, size_t cap, char *key, char 
 	items[index].value = value;
 }
 
-bool ht_contains(ht_hash_table *ht, const char *key) {
+bool ht_contains(const ht_hash_table *ht, const char *key) {
 	size_t _drop;
 	return ht_find(ht, key, &_drop);
 }
@@ -134,7 +135,7 @@ void ht_insert_unique(ht_hash_table *ht, const char *key, const char *value) {
 	}
 }
 
-char *ht_search(ht_hash_table *ht, const char *key) {
+char *ht_search(const ht_hash_table *ht, const char *key) {
 	size_t index;
 	if (ht_find(ht, key, &index)) {
 		return ht->items[index].value;
@@ -150,4 +151,33 @@ void ht_remove(ht_hash_table *ht, const char *key) {
 		ht->size--;
 		ht->items[index].key = NULL;
 	}
+}
+
+ht_iter ht_iterator(const ht_hash_table *ht) {
+	return (ht_iter) {
+		.next = ht->items,
+		.end = ht->items + ht->capacity,
+	};
+}
+
+char *ht_iter_next(ht_iter *iter) {
+	while (iter->next != iter->end) {
+		struct _ht_item *item = iter->next++;
+		if (item->key != NULL) {
+			return item->key;
+		}
+	}
+	return NULL;
+}
+
+bool ht_iter_next_pair(ht_iter *iter, char **key, char **val) {
+	while (iter->next != iter->end) {
+		struct _ht_item *item = iter->next++;
+		if (item->key != NULL) {
+			key != NULL && (*key = item->key);
+			val != NULL && (*val = item->value);
+			return true;
+		}
+	}
+	return false;
 }
