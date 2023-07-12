@@ -99,13 +99,14 @@ __attribute__((nonnull(1, 2, 3), nothrow))
  * \brief Inserts `key` holding `value` into `ht`.
  *
  * Sets `key` to equal `value` in the hash table, replacing any existing value
- * associated with `key` with the new value.
+ * associated with `key` with the new value. Returns `true` if `key` was added
+ * successfully, and `false` on error.
  *
  * \param ht The table to insert into
  * \param key The key to insert under
  * \param value The value to insert under `key`
  */
-void ht_insert(ht_hash_table *ht, const char *key, const char *value);
+bool ht_insert(ht_hash_table *ht, const char *key, const char *value);
 
 __attribute__((nonnull(1, 2, 3), nothrow))
 /**
@@ -115,13 +116,13 @@ __attribute__((nonnull(1, 2, 3), nothrow))
  * Inserts a key which is known not to exist in `ht`, as `ht_insert`. This can
  * be faster than a normal insertion, since it can avoid testing equality with
  * keys, but behavior is undefined if `key` is contained within `ht` before
- * calling.
+ * calling. Returns `true` on success and `false` on error.
  *
  * \param ht The table to insert into
  * \param key The key to insert under
  * \param value The value to insert under `key`
  */
-void ht_insert_unique(ht_hash_table *ht, const char *key, const char *value);
+bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value);
 
 __attribute__((nonnull(1, 2), nothrow, pure))
 /**
@@ -140,13 +141,14 @@ __attribute__((nonnull(1, 2), nothrow))
  * \brief Removes `key` from `ht`.
  *
  * Removes `key` from `ht` and frees the value associated with it. Existing
- * references to that value (from, e.g., `ht_search`) are invalidated. This has
- * no effect if `key` doesn't exist in `ht`.
+ * references to that value (from, e.g., `ht_search`) are invalidated. Returns
+ * `true` if `key` was removed from `ht` and `false` if `key` didn't exist in
+ * `ht`. `ht` is unmodified if the key didn't exist in it.
  *
  * \param ht The table to remove from
  * \param key The key to remove
  */
-void ht_remove(ht_hash_table *ht, const char *key);
+bool ht_remove(ht_hash_table *ht, const char *key);
 
  __attribute__((nonnull(1, 2), nothrow, warn_unused_result))
 /**

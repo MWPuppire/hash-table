@@ -71,7 +71,7 @@ static bool ht_find(const ht_hash_table *ht, const char *key, size_t *out_index)
 
 /// Insert without checking for existing keys or testing capacity.
 __attribute__((nonnull(1, 3, 4), nothrow))
-static void ht_insert_inner(struct _ht_item *items, size_t cap, char *key, char *value) {
+static bool ht_insert_inner(struct _ht_item *items, size_t cap, char *key, char *value) {
 	size_t index = ht_hash(key, strlen(key), cap);
 	size_t attempts = 0;
 	while (items[index].key != NULL) {
@@ -79,6 +79,7 @@ static void ht_insert_inner(struct _ht_item *items, size_t cap, char *key, char 
 	}
 	items[index].key = key;
 	items[index].value = value;
+	return true;
 }
 
 bool ht_contains(const ht_hash_table *ht, const char *key) {
@@ -90,6 +91,9 @@ __attribute__((nonnull(1), nothrow))
 static void ht_resize_exact(ht_hash_table *ht, size_t old_cap, size_t new_cap) {
 	struct _ht_item *old_items = ht->items;
 	struct _ht_item *new_items = calloc(new_cap, sizeof(struct _ht_item));
+	if (__builtin_expect(new_items == NULL, 0)) {
+		return;
+	}
 	for (size_t i = 0; i < old_cap; i++) {
 		if (old_items[i].key != NULL) {
 			ht_insert_inner(new_items, new_cap, old_items[i].key, old_items[i].value);
@@ -139,22 +143,22 @@ void ht_shrink_to_fit(ht_hash_table *ht) {
 	ht_resize_exact(ht, old_cap, new_cap);
 }
 
-void ht_insert(ht_hash_table *ht, const char *key, const char *value) {
+bool ht_insert(ht_hash_table *ht, const char *key, const char *value) {
 	char *key_clone, *val_clone;
 	size_t cur_index;
 	bool contains = ht_find(ht, key, &cur_index);
 	if (contains) {
 		if (__builtin_expect((val_clone = strdup(value)) == NULL, 0)) {
-			return;
+			return false;
 		}
 		free(ht->items[cur_index].value);
 		ht->items[cur_index].value = val_clone;
-		return;
+		return true;
 	}
 	if (__builtin_expect((key_clone = strdup(key)) == NULL, 0)) {
-		return;
+		return false;
 	} else if (__builtin_expect((val_clone = strdup(value)) == NULL, 0)) {
-		return;
+		return false;
 	}
 	size_t cap = ht->capacity;
 	// resize on 75% capacity; expect it to have enough size, normally
@@ -166,12 +170,12 @@ void ht_insert(ht_hash_table *ht, const char *key, const char *value) {
 	}
 }
 
-void ht_insert_unique(ht_hash_table *ht, const char *key, const char *value) {
+bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value) {
 	char *key_clone, *val_clone;
 	if (__builtin_expect((key_clone = strdup(key)) == NULL, 0)) {
-		return;
+		return false;
 	} else if (__builtin_expect((val_clone = strdup(value)) == NULL, 0)) {
-		return;
+		return false;
 	}
 	size_t cap = ht->capacity;
 	// resize on 75% capacity; expect it to have enough size, normally
@@ -193,7 +197,7 @@ char *ht_search(const ht_hash_table *ht, const char *key) {
 	}
 }
 
-void ht_remove(ht_hash_table *ht, const char *key) {
+bool ht_remove(ht_hash_table *ht, const char *key) {
 	size_t index;
 	// keys being removed probably exist
 	if (__builtin_expect(ht_find(ht, key, &index), 1)) {
@@ -201,7 +205,9 @@ void ht_remove(ht_hash_table *ht, const char *key) {
 		free(ht->items[index].value);
 		ht->size--;
 		ht->items[index].key = NULL;
+		return true;
 	}
+	return false;
 }
 
 char *ht_remove_get(ht_hash_table *ht, const char *key) {
