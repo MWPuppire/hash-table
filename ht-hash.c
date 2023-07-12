@@ -1,8 +1,10 @@
-	#include <stdlib.h>
+#include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "ht-hash.h"
 
+/** \internal */
 struct _ht_item {
 	char *key;
 	char *value;
@@ -10,6 +12,9 @@ struct _ht_item {
 
 ht_hash_table *ht_new(void) {
 	ht_hash_table *ht = malloc(sizeof(ht_hash_table));
+	if (ht == NULL) {
+		return NULL;
+	}
 	ht->capacity = 64;
 	ht->size = 0;
 	ht->items = calloc(64, sizeof(struct _ht_item));
@@ -29,6 +34,7 @@ void ht_destroy(ht_hash_table *ht) {
 static const size_t FIB_MULT = 11400714819323198485ull;
 static const size_t HT_PRIME = 151;
 
+__attribute__((nonnull(1), pure, nothrow))
 static size_t ht_hash(const char *s, size_t cap) {
 	int shift = 64 - __builtin_ctz(cap);
 	size_t hash = 0;
@@ -45,6 +51,7 @@ static size_t ht_hash(const char *s, size_t cap) {
 /// assigns the index of the key in `items` to `out_index` upon finding.
 /// `out_index` is assumed to be non-`NULL`, since the function is private;
 /// calling it with `NULL` for `out_index` will seg-fault.
+__attribute__((nonnull(1, 2, 3), pure, nothrow))
 static bool ht_find(const ht_hash_table *ht, const char *key, size_t *out_index) {
 	size_t cap = ht->capacity;
 	size_t index = ht_hash(key, cap);
@@ -66,6 +73,7 @@ static bool ht_find(const ht_hash_table *ht, const char *key, size_t *out_index)
 }
 
 /// Insert without checking for existing keys or testing capacity.
+__attribute__((nonnull(1, 3, 4), nothrow))
 static void ht_insert_inner(struct _ht_item *items, size_t cap, char *key, char *value) {
 	size_t index = ht_hash(key, cap);
 	if (items[index].key != NULL) {
@@ -229,9 +237,10 @@ bool ht_iter_next_pair(ht_iter *iter, char **key, char **val) {
 
 /// Much simpler version of `ht_json_stringify` in the event `out` is `NULL`, to
 /// avoid unnecessary allocation and buffer-writing.
-static size_t ht_json_dry_run(const ht_hash_table *table) {
+__attribute__((nonnull(1), nothrow))
+static size_t ht_json_dry_run(const ht_hash_table *ht) {
 	size_t len = 1;
-	ht_iter iter = ht_iterator(table);
+	ht_iter iter = ht_iterator(ht);
 	char *key, *val;
 	while (ht_iter_next_pair(&iter, &key, &val)) {
 		len++; // quote
@@ -244,20 +253,20 @@ static size_t ht_json_dry_run(const ht_hash_table *table) {
 	return len;
 }
 
-size_t ht_json_stringify(const ht_hash_table *table, char **out) {
+size_t ht_json_stringify(const ht_hash_table *ht, char **out) {
 	if (out == NULL) {
-		return json_dry_run(table);
+		return ht_json_dry_run(ht);
 	}
 	// probably a reasonable starting point, factoring in quotes, commas,
 	// colons, and assuming keys/values typically are less than 10 letters
-	size_t cap = table->size * 20;
+	size_t cap = ht->size * 20;
 	// test no overflow happened
-	assert(cap > table->size);
+	assert(cap > ht->size);
 	char *buf = malloc(cap);
 	*buf = '{';
 	size_t pos = 1;
 
-	ht_iter iter = ht_iterator(table);
+	ht_iter iter = ht_iterator(ht);
 	char *key, *val;
 	while (ht_iter_next_pair(&iter, &key, &val)) {
 		buf[pos++] = '"';

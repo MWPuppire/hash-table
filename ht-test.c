@@ -75,10 +75,9 @@ int main(int argc, char *argv[]) {
 	}
 
 	char *buf = NULL;
-	size_t len = json_stringify(table, &buf);
+	size_t len = ht_json_stringify(table, &buf);
 	assert(len != 0);
 	printf("%s\n", buf);
-	printf("%zu\n", len);
 	free(buf);
 
 	ht_destroy(table);
