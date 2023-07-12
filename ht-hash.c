@@ -270,7 +270,7 @@ static size_t ht_json_dry_run(const ht_hash_table *ht) {
 		len += 2; // close quote, comma
 	}
 	// closing comma becomes closing bracket for length
-	return len;
+	return len + __builtin_expect(len == 1, 0);
 }
 
 size_t ht_json_stringify(const ht_hash_table *ht, char **out) {
@@ -314,6 +314,10 @@ size_t ht_json_stringify(const ht_hash_table *ht, char **out) {
 		buf[pos++] = ',';
 	}
 	// overwrite the comma, since JSON can't have trailing commas
+	if (__builtin_expect(pos == 1, 0)) {
+		// add one in case there were no commas, though
+		pos++;
+	}
 	buf[pos - 1] = '}';
 	buf[pos] = '\0';
 	*out = buf;
@@ -343,16 +347,17 @@ static size_t ht_json_dry_run_escape(const ht_hash_table *ht) {
 		len += 2; // close quote, comma
 	}
 	// closing comma becomes closing bracket for length
-	return len;
+	return len + __builtin_expect(len == 1, 0);
 }
 
 size_t ht_json_stringify_escape(const ht_hash_table *ht, char **out) {
 	if (out == NULL) {
 		return ht_json_dry_run_escape(ht);
 	}
-	// probably a reasonable starting point, factoring in quotes, commas,
-	// colons, and assuming keys/values typically are less than 10 letters
-	size_t cap = ht->size * 24;
+	// Probably a reasonable starting point, factoring in quotes, commas,
+	// colons, and assuming keys/values typically are less than 10 letters.
+	// Add 5 in case there are no items in `ht`, so it can still hold `{}`.
+	size_t cap = ht->size * 24 + 5;
 	// test no overflow happened
 	assert(cap > ht->size);
 	char *buf = malloc(cap);
@@ -408,6 +413,10 @@ size_t ht_json_stringify_escape(const ht_hash_table *ht, char **out) {
 		buf[pos++] = ',';
 	}
 	// overwrite the comma, since JSON can't have trailing commas
+	if (__builtin_expect(pos == 1, 0)) {
+		// add one in case there were no commas, though
+		pos++;
+	}
 	buf[pos - 1] = '}';
 	buf[pos] = '\0';
 	*out = buf;
