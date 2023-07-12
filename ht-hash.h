@@ -220,3 +220,23 @@ __attribute__((nonnull(1), nothrow))
  * \param out Where to place the created buffer
  */
 size_t ht_json_stringify(const ht_hash_table *ht, char **out);
+
+__attribute__((nonnull(1), nothrow))
+/**
+ * \brief Creates a JSON string of `ht`, escaping quotes.
+ *
+ * Creates a JSON string containing the pairs in `ht` and writes it to `out`,
+ * overwriting any existing value. Allocates a buffer to hold it; the caller is
+ * responsible for freeing `out`. Returns the number of bytes written.
+ * On a failure, 0 is returned, and `out` isn't changed, nor is any memory
+ * allocated. Note that 0 will never be returned in a successful case, since the
+ * opening & closing braces ensure a valid JSON string will never be 0 bytes.
+ * Unlike `ht_json_stringify`, this function escapes quotes in keys and values
+ * with a backslash, keeping it valid JSON. This function will be slightly
+ * slower even without any quotes to escape, so if you know there won't be
+ * quotes in keys or values, `ht_json_stringify` should be used.
+ *
+ * \param ht The table to stringify
+ * \param out Where to place the created buffer
+ */
+size_t ht_json_stringify_escape(const ht_hash_table *ht, char **out);

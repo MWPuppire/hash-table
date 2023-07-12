@@ -12,6 +12,7 @@
 int main(int argc, char *argv[]) {
 	(void) argc; (void) argv;
 	ht_hash_table *table = ht_new();
+	assert(table != NULL);
 
 	// can add and retrieve keys
 	ht_insert(table, "hello", "world");
@@ -74,11 +75,29 @@ int main(int argc, char *argv[]) {
 		assert(seenNums[i]);
 	}
 
-	char *buf = NULL;
-	size_t len = ht_json_stringify(table, &buf);
-	assert(len != 0);
-	printf("%s\n", buf);
-	free(buf);
+	// JSON stringifies correctly
+	// really, there should be a snapshot or similar to confirm this
+	char *buf_unescaped, *buf_escaped;
+	size_t unescaped_len, escaped_len;
+	unescaped_len = ht_json_stringify(table, &buf_unescaped);
+	assert(unescaped_len != 0);
+	escaped_len = ht_json_stringify_escape(table, &buf_escaped);
+	assert(escaped_len != 0);
+	assert(escaped_len == unescaped_len);
+	assert(strncmp(buf_unescaped, buf_escaped, escaped_len) == 0);
+	free(buf_unescaped);
+	free(buf_escaped);
+
+	// escaped JSON is different when a value contains a quote
+	ht_insert(table, "test", "escaped \"");
+	unescaped_len = ht_json_stringify(table, &buf_unescaped);
+	assert(unescaped_len != 0);
+	escaped_len = ht_json_stringify_escape(table, &buf_escaped);
+	assert(escaped_len != 0);
+	assert(escaped_len == unescaped_len + 1);
+	assert(strncmp(buf_unescaped, buf_escaped, unescaped_len) != 0);
+	free(buf_unescaped);
+	free(buf_escaped);
 
 	ht_destroy(table);
 	return 0;
