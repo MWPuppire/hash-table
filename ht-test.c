@@ -74,5 +74,13 @@ int main(int argc, char *argv[]) {
 		assert(seenNums[i]);
 	}
 
+	char *buf = NULL;
+	size_t len = json_stringify(table, &buf);
+	assert(len != 0);
+	printf("%s\n", buf);
+	printf("%zu\n", len);
+	free(buf);
+
+	ht_destroy(table);
 	return 0;
 }
