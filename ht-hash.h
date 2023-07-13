@@ -58,6 +58,17 @@ __attribute__((nonnull(1), nothrow))
  */
 void ht_destroy(ht_hash_table *ht);
 
+__attribute__((nonnull(1), nothrow))
+/**
+ * \brief Removes all items from `ht`.
+ *
+ * Removes all items from `ht`, freeing the memory associated with them and
+ * resetting `size` and `capacity` to 0.
+ *
+ * \param ht The hash table to clear
+ */
+void ht_clear(ht_hash_table *ht);
+
 __attribute__((nonnull(1, 2), nothrow, pure))
 /**
  * \brief Tests if `ht` contains `key`.

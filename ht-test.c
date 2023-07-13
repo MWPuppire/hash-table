@@ -99,6 +99,12 @@ int main(int argc, char *argv[]) {
 	free(buf_unescaped);
 	free(buf_escaped);
 
+	// clearing a table removes all keys
+	ht_clear(table);
+	assert(!ht_contains(table, "hello"));
+	assert(table->capacity == 0);
+	assert(table->size == 0);
+
 	ht_destroy(table);
 	return 0;
 }

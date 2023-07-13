@@ -4,6 +4,8 @@
 
 #include "ht-hash.h"
 
+const size_t HT_INITIAL_CAPACITY = 64;
+
 /** \internal */
 struct _ht_item {
 	char *key;
@@ -15,9 +17,9 @@ ht_hash_table *ht_new(void) {
 	if (__builtin_expect(ht == NULL, 0)) {
 		return NULL;
 	}
-	ht->capacity = 64;
+	ht->capacity = 0;
 	ht->size = 0;
-	ht->items = calloc(64, sizeof(struct _ht_item));
+	ht->items = NULL;
 	return ht;
 }
 
@@ -28,7 +30,20 @@ void ht_destroy(ht_hash_table *ht) {
 			free(ht->items[i].value);
 		}
 	}
+	free(ht->items);
 	free(ht);
+}
+
+void ht_clear(ht_hash_table *ht) {
+	for (size_t i = 0; i < ht->capacity; i++) {
+		if (ht->items[i].key != NULL) {
+			free(ht->items[i].key);
+			free(ht->items[i].value);
+			ht->items[i].key = NULL;
+		}
+	}
+	free(ht->items);
+	memset(ht, 0, sizeof(ht_hash_table));
 }
 
 static const size_t FIB_MULT = 11400714819323198485ull;
@@ -36,6 +51,9 @@ static const size_t HT_PRIME = 151;
 
 __attribute__((nonnull(1), pure, nothrow))
 static size_t ht_hash(const char *s, size_t len, size_t cap) {
+	if (cap == 0) {
+		return 0;
+	}
 	int shift = 64 - __builtin_ctz(cap);
 	size_t hash = 0;
 	size_t mult = 1;
@@ -53,6 +71,9 @@ static size_t ht_hash(const char *s, size_t len, size_t cap) {
 __attribute__((nonnull(1, 2, 3), pure, nothrow))
 static bool ht_find(const ht_hash_table *ht, const char *key, size_t *out_index) {
 	size_t cap = ht->capacity;
+	if (cap == 0) {
+		return false;
+	}
 	size_t len = strlen(key);
 	size_t index = ht_hash(key, len, cap);
 	size_t attempts = 0;
@@ -72,6 +93,7 @@ static bool ht_find(const ht_hash_table *ht, const char *key, size_t *out_index)
 /// Insert without checking for existing keys or testing capacity.
 __attribute__((nonnull(1, 3, 4), nothrow))
 static bool ht_insert_inner(struct _ht_item *items, size_t cap, char *key, char *value) {
+	assert(cap != 0);
 	size_t index = ht_hash(key, strlen(key), cap);
 	size_t attempts = 0;
 	while (items[index].key != NULL) {
@@ -128,6 +150,9 @@ void ht_shrink_to_fit(ht_hash_table *ht) {
 	size_t old_cap = ht->capacity;
 	// round up to next power of 2
 	size_t new_cap = ht->size;
+	if (ht->size == 0) {
+		return ht_clear(ht);
+	}
 	new_cap--;
 	new_cap |= new_cap >> 1;
 	new_cap |= new_cap >> 2;
@@ -144,10 +169,10 @@ void ht_shrink_to_fit(ht_hash_table *ht) {
 }
 
 bool ht_insert(ht_hash_table *ht, const char *key, const char *value) {
-	char *key_clone, *val_clone;
 	size_t cur_index;
 	bool contains = ht_find(ht, key, &cur_index);
 	if (contains) {
+		char *val_clone;
 		if (__builtin_expect((val_clone = strdup(value)) == NULL, 0)) {
 			return false;
 		}
@@ -155,19 +180,7 @@ bool ht_insert(ht_hash_table *ht, const char *key, const char *value) {
 		ht->items[cur_index].value = val_clone;
 		return true;
 	}
-	if (__builtin_expect((key_clone = strdup(key)) == NULL, 0)) {
-		return false;
-	} else if (__builtin_expect((val_clone = strdup(value)) == NULL, 0)) {
-		return false;
-	}
-	size_t cap = ht->capacity;
-	// resize on 75% capacity; expect it to have enough size, normally
-	if (__builtin_expect(ht->size++ << 2 > (cap << 1) + cap, 0)) {
-		ht_resize_exact(ht, cap, cap << 1);
-		return ht_insert_inner(ht->items, cap << 1, key_clone, val_clone);
-	} else {
-		return ht_insert_inner(ht->items, cap, key_clone, val_clone);
-	}
+	return ht_insert_unique(ht, key, value);
 }
 
 bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value) {
@@ -178,6 +191,19 @@ bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value) {
 		return false;
 	}
 	size_t cap = ht->capacity;
+	// in case there haven't been any items added yet
+	if (__builtin_expect(cap == 0, 0)) {
+		ht->items = calloc(HT_INITIAL_CAPACITY, sizeof(struct _ht_item));
+		if (__builtin_expect(ht->items == NULL, 0)) {
+			return false;
+		}
+		cap = ht->capacity = HT_INITIAL_CAPACITY;
+		// no need to use `ht_insert_inner` for the first item
+		size_t idx = ht_hash(key_clone, strlen(key_clone), cap);
+		ht->items[idx].key = key_clone;
+		ht->items[idx].value = val_clone;
+		return true;
+	}
 	// resize on 75% capacity; expect it to have enough size, normally
 	if (__builtin_expect(ht->size++ << 2 > (cap << 1) + cap, 0)) {
 		ht_resize_exact(ht, cap, cap << 1);
