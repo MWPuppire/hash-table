@@ -1,6 +1,7 @@
+#include <assert.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "ht-hash.h"
 
@@ -175,11 +176,11 @@ bool ht_insertn(ht_hash_table *ht, const char *key, size_t key_len, const char *
 }
 
 bool ht_insertn_unique(ht_hash_table *ht, const char *key, size_t key_len, const char *value, size_t val_len) {
-	char *key_clone, *val_clone;
-	if (__builtin_expect((key_clone = strndup(key, key_len)) == NULL, 0)) {
-		return false;
-	} else if (__builtin_expect((val_clone = strndup(value, val_len)) == NULL, 0)) {
-		free(key_clone);
+	char *key_clone = strndup(key, key_len), *val_clone = strndup(value, val_len);
+	if (__builtin_expect(key_clone == NULL || val_clone == NULL, 0)) {
+		// one of them is 0, so logical OR works fine for getting either
+		// (and avoids a potential branch for logical OR)
+		free((void *) ((uintptr_t) key_clone | (uintptr_t) val_clone));
 		return false;
 	}
 	size_t cap = ht->capacity;
