@@ -17,8 +17,10 @@ struct _ht_item;
  * \struct ht_hash_table
  * \brief The hash table class.
  *
- * The hash table class. Created via `ht_new`. `_ht_item` is intentionally kept
- * opaque; access to stored values should only be through defined functions.
+ * The hash table class. Should be zero-initialized. `_ht_item` is intentionally
+ * kept opaque; access to stored values should only be through `ht` functions.
+ * `ht_clear` should be called before a table exits scope if any values were
+ * inserted into it to properly release memory.
  */
 typedef struct {
 	size_t capacity;
@@ -37,33 +39,14 @@ typedef struct {
 	struct _ht_item *end;
 } ht_iter;
 
-__attribute__((malloc, nothrow, warn_unused_result))
-/**
- * \brief Creates an empty hash table.
- *
- * Creates a new empty hash table. The caller is responsible for calling
- * `ht_destroy` to avoid memory leaks.
- */
-ht_hash_table *ht_new(void);
-
-__attribute__((nonnull(1), nothrow))
-/**
- * \brief Destroys the hash table `ht`.
- *
- * Releases memory associated with the hash table. This includes all items
- * contained within; pointers to keys and values from the hash table are
- * invalidated after calling this.
- *
- * \param ht The hash table to free
- */
-void ht_destroy(ht_hash_table *ht);
-
 __attribute__((nonnull(1), nothrow))
 /**
  * \brief Removes all items from `ht`.
  *
  * Removes all items from `ht`, freeing the memory associated with them and
- * resetting `size` and `capacity` to 0.
+ * resetting `size` and `capacity` to 0. Must be called to avoid memory leaks
+ * before letting a hash table leave scope, if any values were added to the
+ * table.
  *
  * \param ht The hash table to clear
  */

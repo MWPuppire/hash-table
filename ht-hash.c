@@ -12,28 +12,6 @@ struct _ht_item {
 	char *value;
 };
 
-ht_hash_table *ht_new(void) {
-	ht_hash_table *ht = malloc(sizeof(ht_hash_table));
-	if (__builtin_expect(ht == NULL, 0)) {
-		return NULL;
-	}
-	ht->capacity = 0;
-	ht->size = 0;
-	ht->items = NULL;
-	return ht;
-}
-
-void ht_destroy(ht_hash_table *ht) {
-	for (size_t i = 0; i < ht->capacity; i++) {
-		if (ht->items[i].key != NULL) {
-			free(ht->items[i].key);
-			free(ht->items[i].value);
-		}
-	}
-	free(ht->items);
-	free(ht);
-}
-
 void ht_clear(ht_hash_table *ht) {
 	for (size_t i = 0; i < ht->capacity; i++) {
 		if (ht->items[i].key != NULL) {
