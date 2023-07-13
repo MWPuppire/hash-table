@@ -4,6 +4,11 @@
 
 #include "ht-hash.h"
 
+// Many functions with `n` variants have their unspecified-length-variant call
+// into the specified-length function with a `strlen` argument; I think I can
+// assume GCC will optimize the tail-calls away without adding more cost, but if
+// I'm wrong, then this is going to hurt performance.
+
 const size_t HT_INITIAL_CAPACITY = 64;
 
 /** \internal */
@@ -36,6 +41,9 @@ static size_t ht_hash(const char *s, size_t len, size_t cap) {
 	size_t hash = 0;
 	size_t mult = 1;
 	for (size_t i = 0; i < len; i++) {
+		if (__builtin_expect(s[i] == 0, 0)) {
+			break;
+		}
 		hash += mult * s[i];
 		mult *= HT_PRIME;
 	}
@@ -46,17 +54,16 @@ static size_t ht_hash(const char *s, size_t len, size_t cap) {
 /// assigns the index of the key in `items` to `out_index` upon finding.
 /// `out_index` is assumed to be non-`NULL`, since the function is private;
 /// calling it with `NULL` for `out_index` will seg-fault.
-__attribute__((nonnull(1, 2, 3), pure, nothrow))
-static bool ht_find(const ht_hash_table *ht, const char *key, size_t *out_index) {
+__attribute__((nonnull(1, 2, 4), pure, nothrow))
+static bool ht_find(const ht_hash_table *ht, const char *key, size_t key_len, size_t *out_index) {
 	size_t cap = ht->capacity;
 	if (cap == 0) {
 		return false;
 	}
-	size_t len = strlen(key);
-	size_t index = ht_hash(key, len, cap);
+	size_t index = ht_hash(key, key_len, cap);
 	size_t attempts = 0;
 	while (ht->items[index].key != NULL) {
-		if (strncmp(ht->items[index].key, key, len) == 0) {
+		if (strncmp(ht->items[index].key, key, key_len) == 0) {
 			*out_index = index;
 			return true;
 		}
@@ -69,10 +76,10 @@ static bool ht_find(const ht_hash_table *ht, const char *key, size_t *out_index)
 }
 
 /// Insert without checking for existing keys or testing capacity.
-__attribute__((nonnull(1, 3, 4), nothrow))
-static bool ht_insert_inner(struct _ht_item *items, size_t cap, char *key, char *value) {
+__attribute__((nonnull(1, 3, 5), nothrow))
+static bool ht_insert_inner(struct _ht_item *items, size_t cap, char *key, size_t key_len, char *value) {
 	assert(cap != 0);
-	size_t index = ht_hash(key, strlen(key), cap);
+	size_t index = ht_hash(key, key_len, cap);
 	size_t attempts = 0;
 	while (items[index].key != NULL) {
 		index = (index + (attempts++ << 1) + 1) & (cap - 1);
@@ -82,9 +89,13 @@ static bool ht_insert_inner(struct _ht_item *items, size_t cap, char *key, char 
 	return true;
 }
 
-bool ht_contains(const ht_hash_table *ht, const char *key) {
+bool ht_containsn(const ht_hash_table *ht, const char *key, size_t key_len) {
 	size_t _drop;
-	return ht_find(ht, key, &_drop);
+	return ht_find(ht, key, key_len, &_drop);
+}
+
+bool ht_contains(const ht_hash_table *ht, const char *key) {
+	return ht_containsn(ht, key, strlen(key));
 }
 
 __attribute__((nonnull(1), nothrow))
@@ -95,8 +106,10 @@ static void ht_resize_exact(ht_hash_table *ht, size_t old_cap, size_t new_cap) {
 		return;
 	}
 	for (size_t i = 0; i < old_cap; i++) {
-		if (old_items[i].key != NULL) {
-			ht_insert_inner(new_items, new_cap, old_items[i].key, old_items[i].value);
+		char *key = old_items[i].key;
+		if (key != NULL) {
+			size_t len = strlen(key);
+			ht_insert_inner(new_items, new_cap, key, len, old_items[i].value);
 		}
 	}
 	ht->items = new_items;
@@ -146,26 +159,27 @@ void ht_shrink_to_fit(ht_hash_table *ht) {
 	ht_resize_exact(ht, old_cap, new_cap);
 }
 
-bool ht_insert(ht_hash_table *ht, const char *key, const char *value) {
+bool ht_insertn(ht_hash_table *ht, const char *key, size_t key_len, const char *value, size_t val_len) {
 	size_t cur_index;
-	bool contains = ht_find(ht, key, &cur_index);
+	bool contains = ht_find(ht, key, key_len, &cur_index);
 	if (contains) {
-		char *val_clone;
-		if (__builtin_expect((val_clone = strdup(value)) == NULL, 0)) {
+		char *val_clone = strndup(value, val_len);
+		if (__builtin_expect(val_clone == NULL, 0)) {
 			return false;
 		}
 		free(ht->items[cur_index].value);
 		ht->items[cur_index].value = val_clone;
 		return true;
 	}
-	return ht_insert_unique(ht, key, value);
+	return ht_insertn_unique(ht, key, key_len, value, val_len);
 }
 
-bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value) {
+bool ht_insertn_unique(ht_hash_table *ht, const char *key, size_t key_len, const char *value, size_t val_len) {
 	char *key_clone, *val_clone;
-	if (__builtin_expect((key_clone = strdup(key)) == NULL, 0)) {
+	if (__builtin_expect((key_clone = strndup(key, key_len)) == NULL, 0)) {
 		return false;
-	} else if (__builtin_expect((val_clone = strdup(value)) == NULL, 0)) {
+	} else if (__builtin_expect((val_clone = strndup(value, val_len)) == NULL, 0)) {
+		free(key_clone);
 		return false;
 	}
 	size_t cap = ht->capacity;
@@ -177,7 +191,7 @@ bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value) {
 		}
 		cap = ht->capacity = HT_INITIAL_CAPACITY;
 		// no need to use `ht_insert_inner` for the first item
-		size_t idx = ht_hash(key_clone, strlen(key_clone), cap);
+		size_t idx = ht_hash(key_clone, key_len, cap);
 		ht->items[idx].key = key_clone;
 		ht->items[idx].value = val_clone;
 		return true;
@@ -185,45 +199,70 @@ bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value) {
 	// resize on 75% capacity; expect it to have enough size, normally
 	if (__builtin_expect(ht->size++ << 2 > (cap << 1) + cap, 0)) {
 		ht_resize_exact(ht, cap, cap << 1);
-		return ht_insert_inner(ht->items, cap << 1, key_clone, val_clone);
+		return ht_insert_inner(ht->items, cap << 1, key_clone, key_len, val_clone);
 	} else {
-		return ht_insert_inner(ht->items, cap, key_clone, val_clone);
+		return ht_insert_inner(ht->items, cap, key_clone, key_len, val_clone);
 	}
 }
 
-char *ht_search(const ht_hash_table *ht, const char *key) {
+bool ht_insert(ht_hash_table *ht, const char *key, const char *value) {
+	size_t key_len = strlen(key), cur_index;
+	bool contains = ht_find(ht, key, key_len, &cur_index);
+	if (contains) {
+		char *val_clone;
+		if (__builtin_expect((val_clone = strdup(value)) == NULL, 0)) {
+			return false;
+		}
+		free(ht->items[cur_index].value);
+		ht->items[cur_index].value = val_clone;
+		return true;
+	}
+	return ht_insertn_unique(ht, key, key_len, value, strlen(value));
+}
+
+bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value) {
+	return ht_insertn_unique(ht, key, strlen(key), value, strlen(value));
+}
+
+char *ht_searchn(const ht_hash_table *ht, const char *key, size_t key_len) {
 	size_t index;
 	// keys being searched for probably exist
-	if (__builtin_expect(ht_find(ht, key, &index), 1)) {
+	if (__builtin_expect(ht_find(ht, key, key_len, &index), 1)) {
 		return ht->items[index].value;
 	} else {
 		return NULL;
 	}
 }
 
-bool ht_remove(ht_hash_table *ht, const char *key) {
-	size_t index;
-	// keys being removed probably exist
-	if (__builtin_expect(ht_find(ht, key, &index), 1)) {
-		free(ht->items[index].key);
-		free(ht->items[index].value);
-		ht->size--;
-		ht->items[index].key = NULL;
-		return true;
-	}
-	return false;
+char *ht_search(const ht_hash_table *ht, const char *key) {
+	return ht_searchn(ht, key, strlen(key));
 }
 
-char *ht_remove_get(ht_hash_table *ht, const char *key) {
+bool ht_removen(ht_hash_table *ht, const char *key, size_t key_len) {
+	char *value = ht_removen_get(ht, key, key_len);
+	// `free` on a null-pointer is a no-op, so this is safe.
+	free(value);
+	return value != NULL;
+}
+
+char *ht_removen_get(ht_hash_table *ht, const char *key, size_t key_len) {
 	size_t index;
 	// keys being removed probably exist
-	if (__builtin_expect(ht_find(ht, key, &index), 1)) {
+	if (__builtin_expect(ht_find(ht, key, key_len, &index), 1)) {
 		free(ht->items[index].key);
 		ht->size--;
 		ht->items[index].key = NULL;
 		return ht->items[index].value;
 	}
 	return NULL;
+}
+
+bool ht_remove(ht_hash_table *ht, const char *key) {
+	return ht_removen(ht, key, strlen(key));
+}
+
+char *ht_remove_get(ht_hash_table *ht, const char *key) {
+	return ht_removen_get(ht, key, strlen(key));
 }
 
 ht_iter ht_iterator(const ht_hash_table *ht) {

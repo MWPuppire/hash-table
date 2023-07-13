@@ -54,9 +54,22 @@ void ht_clear(ht_hash_table *ht);
 
 __attribute__((nonnull(1, 2), nothrow, pure))
 /**
- * \brief Tests if `ht` contains `key`.
+ * \brief Tests if `ht` contains `key`, with specified key length.
  *
  * Returns `true` if `key` exists in `ht`, and `false` otherwise.
+ *
+ * \param ht The table to search in
+ * \param key The key to search for
+ * \param key_len The length of `key`, in bytes
+ */
+bool ht_containsn(const ht_hash_table *ht, const char *key, size_t key_len);
+
+__attribute__((nonnull(1, 2), nothrow, pure))
+/**
+ * \brief Tests if `ht` contains `key`.
+ *
+ * Returns `true` if `key` exists in `ht`, and `false` otherwise. Key length is
+ * determined via the `strlen` function.
  *
  * \param ht The table to search in
  * \param key The key to search for
@@ -88,13 +101,49 @@ __attribute__((nonnull(1), nothrow))
  */
 void ht_shrink_to_fit(ht_hash_table *ht);
 
+__attribute__((nonnull(1, 2, 4), nothrow))
+/**
+ * \brief Inserts `key` holding `value` into `ht`, with specified key and value
+ * lengths.
+ *
+ * Sets `key` to equal `value` in the hash table, replacing any existing value
+ * associated with `key` with the new value. Returns `true` if `key` was added
+ * successfully, and `false` on error.
+ *
+ * \param ht The table to insert into
+ * \param key The key to insert under
+ * \param key_len The length of `key`, in bytes
+ * \param value The value to insert under `key`
+ * \param val_len The length of `value`, in bytes
+ */
+bool ht_insertn(ht_hash_table *ht, const char *key, size_t key_len, const char *value, size_t val_len);
+
+__attribute__((nonnull(1, 2, 4), nothrow))
+/**
+ * \brief Inserts `key` holding `value` into `ht`, where `key` didn't exist
+ * previously in `ht`, with specified key and value lengths.
+ *
+ * Inserts a key which is known not to exist in `ht`, as `ht_insert`. This can
+ * be faster than a normal insertion, since it can avoid testing equality with
+ * keys, but behavior is undefined if `key` is contained within `ht` before
+ * calling. Returns `true` on success and `false` on error.
+ *
+ * \param ht The table to insert into
+ * \param key The key to insert under
+ * \param key_len The length of `key`, in bytes
+ * \param value The value to insert under `key`
+ * \param val_len The length of `value`, in bytes
+ */
+bool ht_insertn_unique(ht_hash_table *ht, const char *key, size_t key_len, const char *value, size_t val_len);
+
 __attribute__((nonnull(1, 2, 3), nothrow))
 /**
  * \brief Inserts `key` holding `value` into `ht`.
  *
  * Sets `key` to equal `value` in the hash table, replacing any existing value
  * associated with `key` with the new value. Returns `true` if `key` was added
- * successfully, and `false` on error.
+ * successfully, and `false` on error. Key and value length are determined via
+ * the `strlen` function.
  *
  * \param ht The table to insert into
  * \param key The key to insert under
@@ -110,7 +159,8 @@ __attribute__((nonnull(1, 2, 3), nothrow))
  * Inserts a key which is known not to exist in `ht`, as `ht_insert`. This can
  * be faster than a normal insertion, since it can avoid testing equality with
  * keys, but behavior is undefined if `key` is contained within `ht` before
- * calling. Returns `true` on success and `false` on error.
+ * calling. Returns `true` on success and `false` on error. Key and value length
+ * are determined via the `strlen` function.
  *
  * \param ht The table to insert into
  * \param key The key to insert under
@@ -120,10 +170,23 @@ bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value);
 
 __attribute__((nonnull(1, 2), nothrow, pure))
 /**
- * \brief Returns the value associated with `key`.
+ * \brief Returns the value associated with `key`, with specified key length.
  *
  * Looks up `key` in `ht` and returns the associated value, or `NULL` if the key
  * doesn't exist in `ht`.
+ *
+ * \param ht The table to search through
+ * \param key The key to search for
+ * \param key_len The length of `key`, in bytes
+ */
+char *ht_searchn(const ht_hash_table *ht, const char *key, size_t key_len);
+
+__attribute__((nonnull(1, 2), nothrow, pure))
+/**
+ * \brief Returns the value associated with `key`.
+ *
+ * Looks up `key` in `ht` and returns the associated value, or `NULL` if the key
+ * doesn't exist in `ht`. Key length is determined via the `strlen` function.
  *
  * \param ht The table to search through
  * \param key The key to search for
@@ -132,12 +195,43 @@ char *ht_search(const ht_hash_table *ht, const char *key);
 
 __attribute__((nonnull(1, 2), nothrow))
 /**
- * \brief Removes `key` from `ht`.
+ * \brief Removes `key` from `ht`, with specified key length.
  *
  * Removes `key` from `ht` and frees the value associated with it. Existing
  * references to that value (from, e.g., `ht_search`) are invalidated. Returns
  * `true` if `key` was removed from `ht` and `false` if `key` didn't exist in
  * `ht`. `ht` is unmodified if the key didn't exist in it.
+ *
+ * \param ht The table to remove from
+ * \param key The key to remove
+ * \param key_len The length of `key`, in bytes
+ */
+bool ht_removen(ht_hash_table *ht, const char *key, size_t key_len);
+
+ __attribute__((nonnull(1, 2), nothrow, warn_unused_result))
+/**
+ * \brief Removes `key` from `ht` and returns the value, with specified key
+ * length.
+ *
+ * Removes `key` from `ht` and returns the value that was associated with it.
+ * The caller is made responsible for freeing the returned value. This returns
+ * `NULL` and has no effect on `ht` if `key` doesn't exist in `ht`.
+ *
+ * \param ht The table to remove from
+ * \param key The key to remove
+ * \param key_len The length of `key`, in bytes
+ */
+char *ht_removen_get(ht_hash_table *ht, const char *key, size_t key_len);
+
+__attribute__((nonnull(1, 2), nothrow))
+/**
+ * \brief Removes `key` from `ht`.
+ *
+ * Removes `key` from `ht` and frees the value associated with it. Existing
+ * references to that value (from, e.g., `ht_search`) are invalidated. Returns
+ * `true` if `key` was removed from `ht` and `false` if `key` didn't exist in
+ * `ht`. `ht` is unmodified if the key didn't exist in it. Key length is
+ * determined via the `strlen` function.
  *
  * \param ht The table to remove from
  * \param key The key to remove
@@ -150,7 +244,8 @@ bool ht_remove(ht_hash_table *ht, const char *key);
  *
  * Removes `key` from `ht` and returns the value that was associated with it.
  * The caller is made responsible for freeing the returned value. This returns
- * `NULL` and has no effect on `ht` if `key` doesn't exist in `ht`.
+ * `NULL` and has no effect on `ht` if `key` doesn't exist in `ht`. Key length
+ * is determined via the `strlen` function.
  *
  * \param ht The table to remove from
  * \param key The key to remove

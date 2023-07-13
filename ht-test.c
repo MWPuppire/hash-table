@@ -99,6 +99,13 @@ int main(int argc, char *argv[]) {
 	free(buf_unescaped);
 	free(buf_escaped);
 
+	// only uses the first `n` bytes when specified
+	ht_insertn(&table, "testkey", 4, "hello there", 5);
+	assert(strncmp(ht_search(&table, "test"), "hello", 5) == 0);
+	assert(ht_containsn(&table, "test_", 4));
+	ht_removen(&table, "test", 4);
+	assert(!ht_contains(&table, "test"));
+
 	// clearing a table removes all keys
 	ht_clear(&table);
 	assert(!ht_contains(&table, "hello"));
