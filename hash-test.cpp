@@ -59,6 +59,9 @@ TEST_CASE("can resize tables") {
 	REQUIRE(current >= 3);
 	x.reserve(current * 2);
 	REQUIRE(x.max_size() > current);
+	// since there's no keys, the minimum capacity is 0
+	x.shrink_to_fit();
+	REQUIRE(x.max_size() == 0);
 }
 
 TEST_CASE("can iterate over key/value pairs") {

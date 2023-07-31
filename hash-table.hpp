@@ -4,11 +4,18 @@
 #include <type_traits>
 #include <optional>
 #include <functional>
-#include <iostream>
+#include <ostream>
 
 template<class Key, class T, class Hash = std::hash<Key>, class KeyEqual = std::equal_to<Key>>
 class HashTable {
 public:
+	using key_type = Key;
+	using mapped_type = T;
+	using value_type = std::pair<const Key, T>;
+	using size_type = size_t;
+	using difference_type = ptrdiff_t;
+	using reference = value_type&;
+	using const_reference = const value_type&;
 	class iterator;
 	class const_iterator;
 private:
@@ -54,38 +61,64 @@ private:
 		return (hash * HashTable::FIB_MULT) >> shift;
 	}
 
-	bool index_of(const Key& key, size_t& out_index) const noexcept(IndexNothrow::value) {
+	std::pair<bool, size_t> index_of(const Key& key) const noexcept(IndexNothrow::value) {
 		size_t cap = this->capacity;
 		if (cap == 0) {
-			return false;
+			return std::make_pair(false, 0);
 		}
 		size_t index = HashTable::hash(key, cap);
 		size_t attempts = 0;
 		KeyEqual cmp{};
 		while (this->items[index]) {
 			if (cmp((*this->items[index]).first, key)) {
-				out_index = index;
-				return true;
+				return std::make_pair(true, index);
 			}
 			index = (index + 1) & (cap - 1);
 			if (attempts > this->len) {
-				out_index = index;
-				return false;
+				return std::make_pair(false, index);
 			}
 		}
-		out_index = index;
-		return false;
+		return std::make_pair(false, index);
 	}
 
 	// Assumes `key` does not already exist in `items`, so it continues to
 	// hash as long as that slot is occupied.
-	static iterator inner_insert(HtItem* items, size_t cap, Key key, T value) noexcept(HashNothrow::value) {
-		size_t index = HashTable::hash(key, cap);
+	static std::pair<iterator, bool> inner_insert(HtItem* items, size_t cap, value_type pair) noexcept(HashNothrow::value) {
+		size_t index = HashTable::hash(pair.first, cap);
 		while (items[index]) {
 			index = (index + 1) & (cap - 1);
 		}
-		items[index].emplace(key, value);
-		return iterator(items + index);
+		items[index].emplace(std::move(pair));
+		return std::make_pair(iterator(items + index), true);
+	}
+
+	template<class... Args>
+	std::pair<iterator, bool> emplace_unique_hint(iterator hint, Args&&... args) noexcept(IndexNothrow::value && ItemNothrowMove::value && std::is_nothrow_invocable<value_type, Args...>::value) {
+		value_type pair(std::forward<Args>(args)...);
+		KeyEqual cmp{};
+		if (hint != this->end() && (!hint.item->has_value() || cmp((*hint).first, pair.first))) {
+			bool had_value = hint.item->has_value();
+			hint.item->emplace(std::move(pair));
+			if (!had_value) {
+				size_t cap = this->capacity;
+				// test for resize here; still 75% capacity
+				if (this->len++ << 2 > (cap << 1) + cap) {
+					this->reserve_exact(cap, cap << 1);
+				}
+			}
+			return std::make_pair(hint, !had_value);
+		}
+		if (this->capacity == 0) {
+			this->reserve_exact(0, HashTable::INITIAL_CAPACITY);
+		}
+		size_t cap = this->capacity;
+		// resize on 75% capacity
+		if (this->len++ << 2 > (cap << 1) + cap) {
+			this->reserve_exact(cap, cap << 1);
+			return HashTable::inner_insert(this->items, cap << 1, std::move(pair));
+		} else {
+			return HashTable::inner_insert(this->items, cap, std::move(pair));
+		}
 	}
 
 	// `new_cap` must be a power of 2.
@@ -97,8 +130,7 @@ private:
 					HashTable::inner_insert(
 						new_items,
 						new_cap,
-						std::move((*this->items[i]).first),
-						std::move((*this->items[i]).second)
+						std::move(*this->items[i])
 					);
 				}
 			}
@@ -112,13 +144,6 @@ private:
 	}
 
 public:
-	using key_type = Key;
-	using mapped_type = T;
-	using value_type = std::pair<const Key, T>;
-	using size_type = size_t;
-	using difference_type = ptrdiff_t;
-	using reference = value_type&;
-	using const_reference = const value_type&;
 	class iterator {
 		friend class HashTable;
 	private:
@@ -246,6 +271,9 @@ public:
 
 	// Copy assignment
 	HashTable& operator=(const HashTable& other) noexcept(ItemNothrowCopy::value && ItemNothrowDestructible::value) {
+		if (this == &other) {
+			return *this;
+		}
 		HtItem* new_items = new HtItem[other.capacity]{};
 		try {
 			for (size_t i = 0; i < other.capacity; i++) {
@@ -261,14 +289,19 @@ public:
 		this->capacity = other.capacity;
 		this->len = other.len;
 		this->items = new_items;
+		return *this;
 	}
 	// Move assignment
 	HashTable& operator=(HashTable&& other) noexcept {
+		if (this == &other) {
+			return *this;
+		}
 		this->capacity = other.capacity;
 		this->len = other.len;
 		this->items = other.items;
 		other.capacity = other.len = 0;
 		other.items = nullptr;
+		return *this;
 	}
 
 	bool operator==(const HashTable& other) const noexcept(IndexNothrow::value && std::is_nothrow_invocable_r<bool, decltype(std::declval<T>() == std::declval<T>()), const T&, const T&>::value) {
@@ -292,17 +325,16 @@ public:
 	}
 
 	bool contains(const Key& key) const noexcept(IndexNothrow::value) {
-		size_t drop;
-		return this->index_of(key, drop);
+		return this->index_of(key).first;
 	}
 	size_t count(const Key& key) const noexcept(IndexNothrow::value) {
-		size_t drop;
-		return this->index_of(key, drop) ? 1 : 0;
+		return this->index_of(key).first ? 1 : 0;
 	}
 
-	// because this specifies only a minimum capacity (without an upper
+	// Because this specifies only a minimum capacity (without an upper
 	// bound), it never lowers capacity, assuming that if that many items
-	// were ever allocated, that many may be allocated again later
+	// were ever allocated, that many may be allocated again later. If
+	// lowering memory usage is desired, use `shrink_to_fit`.
 	void reserve(size_t min_capacity) noexcept(HashNothrow::value && ItemNothrowMove::value) {
 		size_t old_cap = this->capacity;
 		if (min_capacity <= old_cap) {
@@ -323,83 +355,105 @@ public:
 		this->reserve_exact(old_cap, new_cap);
 	}
 
-	std::pair<iterator, bool> insert(const Key& key, const T& value) noexcept(IndexNothrow::value && ItemNothrowMove::value && ItemNothrowCopy::value) {
-		size_t cur_index;
-		if (this->index_of(key, cur_index)) {
-			return std::make_pair(iterator(this->items + cur_index), false);
+	void shrink_to_fit() noexcept(HashNothrow::value && ItemNothrowMove::value) {
+		if (this->len == 0) {
+			this->clear();
+			return;
 		}
-		return this->insert_unique(key, value);
+		size_t old_cap = this->capacity;
+		size_t new_cap = this->len;
+		new_cap--;
+		new_cap |= new_cap >> 1;
+		new_cap |= new_cap >> 2;
+		new_cap |= new_cap >> 4;
+		new_cap |= new_cap >> 8;
+		new_cap |= new_cap >> 16;
+		new_cap |= new_cap >> 32;
+		new_cap++;
+		if (new_cap >= old_cap) {
+			return;
+		}
+		this->reserve_exact(old_cap, new_cap);
+	}
+
+	std::pair<iterator, bool> insert(const Key& key, const T& value) noexcept(IndexNothrow::value && ItemNothrowMove::value && ItemNothrowCopy::value) {
+		return this->emplace(Key{key}, T{value});
 	}
 	std::pair<iterator, bool> insert(Key&& key, T&& value) noexcept(IndexNothrow::value && ItemNothrowMove::value) {
-		size_t cur_index;
-		if (this->index_of(key, cur_index)) {
-			return std::make_pair(iterator(this->items + cur_index), false);
-		}
-		return this->insert_unique(std::move(key), std::move(value));
+		return this->emplace(std::move(key), std::move(value));
 	}
 	std::pair<iterator, bool> insert_or_assign(const Key& key, const T& value) noexcept(IndexNothrow::value && ItemNothrowMove::value && ItemNothrowCopy::value) {
-		size_t cur_index;
-		if (this->index_of(key, cur_index)) {
-			(*this->items[cur_index]).second = T{value};
-			return std::make_pair(iterator(this->items + cur_index), false);
-		}
-		return this->insert_unique(key, value);
+		return this->emplace_or_assign(Key{key}, T{value});
 	}
 	std::pair<iterator, bool> insert_or_assign(Key&& key, T&& value) noexcept(IndexNothrow::value && ItemNothrowMove::value) {
-		size_t cur_index;
-		if (this->index_of(key, cur_index)) {
-			(*this->items[cur_index]).second = std::move(value);
-			return std::make_pair(iterator(this->items + cur_index), false);
-		}
-		return this->insert_unique(std::move(key), std::move(value));
+		return this->emplace_or_assign(std::move(key), std::move(value));
 	}
-	// for `insert_unique`, the boolean in the pair is always true, but
-	// returning a pair lets it keep consistent API and hopefully allows
-	// tail-call optimization from the other insert functions
 	std::pair<iterator, bool> insert_unique(const Key& key, const T& value) noexcept(HashNothrow::value && ItemNothrowMove::value && ItemNothrowCopy::value) {
-		if (this->capacity == 0) {
-			this->reserve_exact(0, HashTable::INITIAL_CAPACITY);
-		}
-		size_t cap = this->capacity;
-		// resize on 75% capacity
-		if (this->len++ << 2 > (cap << 1) + cap) {
-			this->reserve_exact(cap, cap << 1);
-			return std::make_pair(HashTable::inner_insert(this->items, cap << 1, Key{key}, T{value}), true);
-		} else {
-			return std::make_pair(HashTable::inner_insert(this->items, cap, Key{key}, T{value}), true);
-		}
+		return this->insert_unique(Key{key}, T{value});
 	}
 	std::pair<iterator, bool> insert_unique(Key&& key, T&& value) noexcept(HashNothrow::value && ItemNothrowMove::value) {
 		if (this->capacity == 0) {
 			this->reserve_exact(0, HashTable::INITIAL_CAPACITY);
 		}
+		value_type pair(std::move(key), std::move(value));
 		size_t cap = this->capacity;
 		// resize on 75% capacity
 		if (this->len++ << 2 > (cap << 1) + cap) {
 			this->reserve_exact(cap, cap << 1);
-			return std::make_pair(HashTable::inner_insert(this->items, cap << 1, std::move(key), std::move(value)), true);
+			return HashTable::inner_insert(this->items, cap << 1, std::move(pair));
 		} else {
-			return std::make_pair(HashTable::inner_insert(this->items, cap, std::move(key), std::move(value)), true);
+			return HashTable::inner_insert(this->items, cap, std::move(pair));
 		}
 	}
 
 	template<class... Args>
 	std::pair<iterator, bool> emplace(Args&&... args) noexcept(IndexNothrow::value && ItemNothrowMove::value && std::is_nothrow_invocable<value_type, Args...>::value) {
 		value_type pair(std::forward<Args>(args)...);
-		return this->insert(pair.first, std::move(pair.second));
+		auto [contains, cur_index] = this->index_of(pair.first);
+		if (contains) {
+			return std::make_pair(iterator(this->items + cur_index), false);
+		}
+		return this->emplace_unique_hint(iterator(this->items + cur_index), std::move(pair));
+	}
+
+	template<class... Args>
+	std::pair<iterator, bool> emplace_hint(const_iterator hint, Args&&... args) noexcept(IndexNothrow::value && ItemNothrowMove::value && std::is_nothrow_invocable<value_type, Args...>::value) {
+		value_type pair(std::forward<Args>(args)...);
+		if (hint != this->cend()) {
+			HtItem* item = hint.item;
+			bool had_value = item->has_value();
+			if (!had_value) {
+				this->len++;
+				item->emplace(std::move(pair));
+			}
+			return std::make_pair(iterator(item), !had_value);
+		}
+		// hint was bad, ignore it
+		return this->emplace(std::move(pair));
+	}
+
+	template<class... Args>
+	std::pair<iterator, bool> emplace_or_assign(Args&&... args) noexcept(IndexNothrow::value && ItemNothrowMove::value && std::is_nothrow_invocable<value_type, Args...>::value) {
+		value_type pair(std::forward<Args>(args)...);
+		auto [contains, cur_index] = this->index_of(pair.first);
+		if (contains) {
+			this->items[cur_index].emplace(std::move(pair));
+			return std::make_pair(iterator(this->items + cur_index), false);
+		}
+		return this->emplace_unique_hint(iterator(this->items + cur_index), std::move(pair));
 	}
 
 	iterator find(const Key& key) noexcept(IndexNothrow::value) {
-		size_t index;
-		if (this->index_of(key, index)) {
+		auto [contains, index] = this->index_of(key);
+		if (contains) {
 			return iterator(this->items + index);
 		} else {
 			return this->end();
 		}
 	}
 	const_iterator find(const Key& key) const noexcept(IndexNothrow::value) {
-		size_t index;
-		if (this->index_of(key, index)) {
+		auto [contains, index] = this->index_of(key);
+		if (contains) {
 			return const_iterator(this->items + index);
 		} else {
 			return this->cend();
@@ -409,8 +463,8 @@ public:
 		if (this->capacity == 0) {
 			this->reserve_exact(0, HashTable::INITIAL_CAPACITY);
 		}
-		size_t index;
-		if (this->index_of(key, index)) {
+		auto [contains, index] = this->index_of(key);
+		if (contains) {
 			return (*this->items[index]).second;
 		} else {
 			this->len++;
@@ -424,16 +478,16 @@ public:
 	}
 
 	T& at(const Key& key) {
-		size_t index;
-		if (this->index_of(key, index)) {
+		auto [contains, index] = this->index_of(key);
+		if (contains) {
 			return (*this->items[index]).second;
 		} else {
 			throw std::out_of_range("Key doesn't exist");
 		}
 	}
 	const T& at(const Key& key) const {
-		size_t index;
-		if (this->index_of(key, index)) {
+		auto [contains, index] = this->index_of(key);
+		if (contains) {
 			return (*this->items[index]).second;
 		} else {
 			throw std::out_of_range("Key doesn't exist");
@@ -460,8 +514,8 @@ public:
 		return iterator((HtItem*) last.item, last.end);
 	}
 	size_t erase(const Key& key) noexcept(IndexNothrow::value && ItemNothrowDestructible::value) {
-		size_t index;
-		if (this->index_of(key, index)) {
+		auto [contains, index] = this->index_of(key);
+		if (contains) {
 			this->items[index].reset();
 			this->len--;
 			return 1;
