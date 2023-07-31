@@ -4,11 +4,13 @@
 #include <type_traits>
 #include <optional>
 #include <functional>
+#include <iostream>
 
 template<class Key, class T, class Hash = std::hash<Key>, class KeyEqual = std::equal_to<Key>>
 class HashTable {
 public:
 	class iterator;
+	class const_iterator;
 private:
 	using HtItem = std::optional<std::pair<const Key, T>>;
 
@@ -22,12 +24,12 @@ private:
 
 	using HashNothrow = std::conjunction<
 		std::is_nothrow_default_constructible<Hash>,
-		std::is_nothrow_invocable_r<size_t, Hash, const Key &>
+		std::is_nothrow_invocable_r<size_t, Hash, const Key&>
 	>;
 	using IndexNothrow = std::conjunction<
 		HashTable::HashNothrow,
 		std::is_nothrow_default_constructible<KeyEqual>,
-		std::is_nothrow_invocable_r<bool, KeyEqual, const Key &, const Key &>
+		std::is_nothrow_invocable_r<bool, KeyEqual, const Key&, const Key&>
 	>;
 	using ItemNothrowDefault = std::conjunction<
 		std::is_nothrow_default_constructible<Key>,
@@ -65,7 +67,7 @@ private:
 				out_index = index;
 				return true;
 			}
-			index = (index + (attempts << 1) + 1) & (cap - 1);
+			index = (index + 1) & (cap - 1);
 			if (attempts > this->len) {
 				out_index = index;
 				return false;
@@ -79,9 +81,8 @@ private:
 	// hash as long as that slot is occupied.
 	static iterator inner_insert(HtItem* items, size_t cap, Key key, T value) noexcept(HashNothrow::value) {
 		size_t index = HashTable::hash(key, cap);
-		size_t attempts = 0;
 		while (items[index]) {
-			index = (index + (attempts++ << 1) + 1) & (cap - 1);
+			index = (index + 1) & (cap - 1);
 		}
 		items[index].emplace(key, value);
 		return iterator(items + index);
@@ -131,7 +132,7 @@ public:
 		using reference = value_type&;
 		iterator(HtItem* item) noexcept : item(item), end(item) { }
 		iterator(HtItem* item, const HtItem* end) noexcept : end(end) {
-			while (!item && item != end) {
+			while (!item->has_value() && item != end) {
 				item++;
 			}
 			this->item = item;
@@ -154,10 +155,13 @@ public:
 			return this->item == other.item && this->end == other.end;
 		}
 		bool operator!=(const iterator& other) const noexcept {
-			return this->item != other.item || this->end != other.end;
+			return !(*this == other);
 		}
 		reference operator*() {
 			return this->item->value();
+		}
+		operator const_iterator() const {
+			return const_iterator(this->item, this->end);
 		}
 	};
 	class const_iterator {
@@ -173,7 +177,7 @@ public:
 		using reference = const value_type&;
 		const_iterator(const HtItem* item) noexcept : item(item), end(item) { }
 		const_iterator(const HtItem* item, const HtItem* end) noexcept : end(end) {
-			while (!item && item != end) {
+			while (!item->has_value() && item != end) {
 				item++;
 			}
 			this->item = item;
@@ -196,7 +200,7 @@ public:
 			return this->item == other.item && this->item == other.end;
 		}
 		bool operator!=(const const_iterator& other) const noexcept {
-			return this->item != other.item || this->item != other.end;
+			return !(*this == other);
 		}
 		const_reference operator*() const {
 			return this->item->value();
@@ -209,13 +213,18 @@ public:
 	}
 	// Copy constructor
 	HashTable(const HashTable& other) noexcept(ItemNothrowCopy::value) {
+		if (other.capacity == 0) {
+			this->capacity = this->len = 0;
+			this->items = nullptr;
+			return;
+		}
 		this->capacity = other.capacity;
 		this->len = other.len;
 		this->items = new HtItem[other.capacity]{};
 		try {
 			for (size_t i = 0; i < other.capacity; i++) {
 				if (other.items[i]) {
-					this->items[i].emplace(other.items[i].first, other.items[i].second);
+					this->items[i].emplace((*other.items[i]).first, (*other.items[i]).second);
 				}
 			}
 		} catch (...) {
@@ -241,7 +250,7 @@ public:
 		try {
 			for (size_t i = 0; i < other.capacity; i++) {
 				if (other.items[i]) {
-					new_items[i].emplace(other.items[i].first, other.items[i].second);
+					new_items[i].emplace((*other.items[i]).first, (*other.items[i]).second);
 				}
 			}
 		} catch (...) {
@@ -262,11 +271,24 @@ public:
 		other.items = nullptr;
 	}
 
-	bool operator==(const HashTable& other) const noexcept {
-		return this->begin() == other.begin();
+	bool operator==(const HashTable& other) const noexcept(IndexNothrow::value && std::is_nothrow_invocable_r<bool, decltype(std::declval<T>() == std::declval<T>()), const T&, const T&>::value) {
+		if (this->len != other.len) {
+			return false;
+		}
+		// test pointer equality before doing the more expensive test
+		if (this->items == other.items) {
+			return true;
+		}
+		for (const auto& [key, val] : *this) {
+			const_iterator iter = other.find(key);
+			if (iter == other.cend() || val != (*iter).second) {
+				return false;
+			}
+		}
+		return true;
 	}
-	bool operator!=(const HashTable& other) const noexcept {
-		return this->begin() != other.begin();
+	bool operator!=(const HashTable& other) const noexcept(IndexNothrow::value && std::is_nothrow_invocable_r<bool, decltype(std::declval<T>() == std::declval<T>()), const T&, const T&>::value) {
+		return !(*this == other);
 	}
 
 	bool contains(const Key& key) const noexcept(IndexNothrow::value) {
@@ -367,20 +389,20 @@ public:
 		return this->insert(pair.first, std::move(pair.second));
 	}
 
-	const_iterator find(const Key& key) const noexcept(IndexNothrow::value) {
-		size_t index;
-		if (this->index_of(key, index)) {
-			return const_iterator(this->items + index);
-		} else {
-			return const_iterator(this->items + capacity);
-		}
-	}
 	iterator find(const Key& key) noexcept(IndexNothrow::value) {
 		size_t index;
 		if (this->index_of(key, index)) {
 			return iterator(this->items + index);
 		} else {
-			return iterator(this->items + capacity);
+			return this->end();
+		}
+	}
+	const_iterator find(const Key& key) const noexcept(IndexNothrow::value) {
+		size_t index;
+		if (this->index_of(key, index)) {
+			return const_iterator(this->items + index);
+		} else {
+			return this->cend();
 		}
 	}
 	T& find_or_insert(const Key& key) noexcept(IndexNothrow::value && ItemNothrowDefault::value) {
@@ -419,19 +441,23 @@ public:
 	}
 
 	iterator erase(iterator pos) noexcept(ItemNothrowDestructible::value) {
-		pos.item->erase();
+		pos.item->reset();
+		this->len--;
 		return ++pos;
 	}
+	// sort-of cheating, but it works
 	iterator erase(const_iterator pos) noexcept(ItemNothrowDestructible::value) {
-		pos.item->erase();
+		((HtItem*) (pos.item))->reset();
+		this->len--;
 		return ++pos;
 	}
 	iterator erase(const_iterator first, const_iterator last) noexcept(ItemNothrowDestructible::value) {
 		while (first != last) {
-			first.item->erase();
+			((HtItem*) (first.item))->reset();
+			this->len--;
 			++first;
 		}
-		return last;
+		return iterator((HtItem*) last.item, last.end);
 	}
 	size_t erase(const Key& key) noexcept(IndexNothrow::value && ItemNothrowDestructible::value) {
 		size_t index;
@@ -478,6 +504,12 @@ public:
 	iterator end() {
 		return iterator(this->items + this->capacity);
 	}
+	const_iterator begin() const {
+		return const_iterator(this->items, this->items + this->capacity);
+	}
+	const_iterator end() const {
+		return const_iterator(this->items + this->capacity);
+	}
 	const_iterator cbegin() const {
 		return const_iterator(this->items, this->items + this->capacity);
 	}
@@ -488,4 +520,18 @@ public:
 template<class Key, class T>
 void swap(HashTable<Key, T>& h1, HashTable<Key, T>& h2) {
 	h1.swap(h2);
+}
+
+template<class Key, class T>
+std::ostream& operator<<(std::ostream& os, const HashTable<Key, T>& table) {
+	if (table.size() == 0) {
+		os << "HashTable {}";
+		return os;
+	}
+	os << "HashTable {" << std::endl;
+	for (const auto& [key, val] : table) {
+		os << "\t" << key << ": " << val << "," << std::endl;
+	}
+	os << "}";
+	return os;
 }
