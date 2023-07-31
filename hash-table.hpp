@@ -1,10 +1,14 @@
-#include <string>
-#include <stdexcept>
-#include <utility>
-#include <type_traits>
-#include <optional>
+#if __cplusplus >= 202002L
+#	include <bit>
+#endif
 #include <functional>
+#include <memory>
+#include <optional>
 #include <ostream>
+#include <stdexcept>
+#include <string>
+#include <type_traits>
+#include <utility>
 
 template<class Key, class T, class Hash = std::hash<Key>, class KeyEqual = std::equal_to<Key>>
 class HashTable {
@@ -27,7 +31,7 @@ private:
 
 	size_t capacity;
 	size_t len;
-	HtItem* items;
+	std::unique_ptr<HtItem[]> items;
 
 	using HashNothrow = std::conjunction<
 		std::is_nothrow_default_constructible<Hash>,
@@ -55,8 +59,26 @@ private:
 		std::is_nothrow_destructible<T>
 	>;
 
+#if __cplusplus < 202002L
+	static inline size_t bit_ceil(size_t x) {
+		x--;
+		x |= x >> 1;
+		x |= x >> 2;
+		x |= x >> 4;
+		x |= x >> 8;
+		x |= x >> 16;
+		x |= x >> 32;
+		x++;
+		return x;
+	}
+#endif
+
 	static size_t hash(const Key& val, size_t cap) noexcept(HashNothrow::value) {
-		int shift = 64 - __builtin_ctz(cap);
+#if __cplusplus >= 202002L
+		int shift = std::countl_zero(cap) + 1;
+#else
+		int shift = __builtin_clzll(cap) + 1;
+#endif
 		size_t hash = Hash{}(val);
 		return (hash * HashTable::FIB_MULT) >> shift;
 	}
@@ -83,13 +105,13 @@ private:
 
 	// Assumes `key` does not already exist in `items`, so it continues to
 	// hash as long as that slot is occupied.
-	static std::pair<iterator, bool> inner_insert(HtItem* items, size_t cap, value_type pair) noexcept(HashNothrow::value) {
+	static std::pair<iterator, bool> inner_insert(std::unique_ptr<HtItem[]> &items, size_t cap, value_type pair) noexcept(HashNothrow::value) {
 		size_t index = HashTable::hash(pair.first, cap);
 		while (items[index]) {
 			index = (index + 1) & (cap - 1);
 		}
 		items[index].emplace(std::move(pair));
-		return std::make_pair(iterator(items + index), true);
+		return std::make_pair(iterator(items.get() + index), true);
 	}
 
 	template<class... Args>
@@ -123,23 +145,17 @@ private:
 
 	// `new_cap` must be a power of 2.
 	void reserve_exact(size_t old_cap, size_t new_cap) noexcept(HashNothrow::value && ItemNothrowMove::value) {
-		HtItem* new_items = new HtItem[new_cap]{};
-		try {
-			for (size_t i = 0; i < old_cap; i++) {
-				if (this->items[i]) {
-					HashTable::inner_insert(
-						new_items,
-						new_cap,
-						std::move(*this->items[i])
-					);
-				}
+		std::unique_ptr<HtItem[]> new_items(new HtItem[new_cap]);
+		for (size_t i = 0; i < old_cap; i++) {
+			if (this->items[i]) {
+				HashTable::inner_insert(
+					new_items,
+					new_cap,
+					std::move(*this->items[i])
+				);
 			}
-		} catch (...) {
-			delete[] new_items;
-			throw;
 		}
-		delete[] this->items;
-		this->items = new_items;
+		this->items = std::move(new_items);
 		this->capacity = new_cap;
 	}
 
@@ -245,50 +261,37 @@ public:
 		}
 		this->capacity = other.capacity;
 		this->len = other.len;
-		this->items = new HtItem[other.capacity]{};
-		try {
-			for (size_t i = 0; i < other.capacity; i++) {
-				if (other.items[i]) {
-					this->items[i].emplace((*other.items[i]).first, (*other.items[i]).second);
-				}
+		this->items = std::make_unique<HtItem[]>(other.capacity);
+		for (size_t i = 0; i < other.capacity; i++) {
+			if (other.items[i]) {
+				this->items[i].emplace((*other.items[i]).first, (*other.items[i]).second);
 			}
-		} catch (...) {
-			delete[] this->items;
-			throw;
 		}
 	}
 	// Move constructor
 	HashTable(HashTable&& other) noexcept {
 		this->capacity = other.capacity;
 		this->len = other.len;
-		this->items = other.items;
+		this->items = std::move(other.items);
 		other.capacity = other.len = 0;
 		other.items = nullptr;
 	}
-	~HashTable() noexcept(ItemNothrowDestructible::value) {
-		delete[] this->items;
-	}
+	~HashTable() noexcept(ItemNothrowDestructible::value) = default;
 
 	// Copy assignment
 	HashTable& operator=(const HashTable& other) noexcept(ItemNothrowCopy::value && ItemNothrowDestructible::value) {
 		if (this == &other) {
 			return *this;
 		}
-		HtItem* new_items = new HtItem[other.capacity]{};
-		try {
-			for (size_t i = 0; i < other.capacity; i++) {
-				if (other.items[i]) {
-					new_items[i].emplace((*other.items[i]).first, (*other.items[i]).second);
-				}
+		std::unique_ptr<HtItem[]> new_items(new HtItem[other.capacity]);
+		for (size_t i = 0; i < other.capacity; i++) {
+			if (other.items[i]) {
+				new_items[i].emplace((*other.items[i]).first, (*other.items[i]).second);
 			}
-		} catch (...) {
-			delete[] new_items;
-			throw;
 		}
-		delete[] this->items;
 		this->capacity = other.capacity;
 		this->len = other.len;
-		this->items = new_items;
+		this->items = std::move(new_items);
 		return *this;
 	}
 	// Move assignment
@@ -298,7 +301,7 @@ public:
 		}
 		this->capacity = other.capacity;
 		this->len = other.len;
-		this->items = other.items;
+		this->items = std::move(other.items);
 		other.capacity = other.len = 0;
 		other.items = nullptr;
 		return *this;
@@ -341,17 +344,12 @@ public:
 			return;
 		}
 
-		// round up to next power of 2
-		size_t new_cap = min_capacity;
-		new_cap--;
-		new_cap |= new_cap >> 1;
-		new_cap |= new_cap >> 2;
-		new_cap |= new_cap >> 4;
-		new_cap |= new_cap >> 8;
-		new_cap |= new_cap >> 16;
-		new_cap |= new_cap >> 32;
-		new_cap++;
-
+		// capacity must always be a power of 2
+#if __cplusplus >= 202002L
+		size_t new_cap = std::bit_ceil(min_capacity);
+#else
+		size_t new_cap = HashTable::bit_ceil(min_capacity);
+#endif
 		this->reserve_exact(old_cap, new_cap);
 	}
 
@@ -361,15 +359,12 @@ public:
 			return;
 		}
 		size_t old_cap = this->capacity;
-		size_t new_cap = this->len;
-		new_cap--;
-		new_cap |= new_cap >> 1;
-		new_cap |= new_cap >> 2;
-		new_cap |= new_cap >> 4;
-		new_cap |= new_cap >> 8;
-		new_cap |= new_cap >> 16;
-		new_cap |= new_cap >> 32;
-		new_cap++;
+		// capacity must always be a power of 2
+#if __cplusplus >= 202002L
+		size_t new_cap = std::bit_ceil(capacity);
+#else
+		size_t new_cap = HashTable::bit_ceil(capacity);
+#endif
 		if (new_cap >= old_cap) {
 			return;
 		}
@@ -411,9 +406,9 @@ public:
 		value_type pair(std::forward<Args>(args)...);
 		auto [contains, cur_index] = this->index_of(pair.first);
 		if (contains) {
-			return std::make_pair(iterator(this->items + cur_index), false);
+			return std::make_pair(iterator(this->items.get() + cur_index), false);
 		}
-		return this->emplace_unique_hint(iterator(this->items + cur_index), std::move(pair));
+		return this->emplace_unique_hint(iterator(this->items.get() + cur_index), std::move(pair));
 	}
 
 	template<class... Args>
@@ -438,15 +433,15 @@ public:
 		auto [contains, cur_index] = this->index_of(pair.first);
 		if (contains) {
 			this->items[cur_index].emplace(std::move(pair));
-			return std::make_pair(iterator(this->items + cur_index), false);
+			return std::make_pair(iterator(this->items.get() + cur_index), false);
 		}
-		return this->emplace_unique_hint(iterator(this->items + cur_index), std::move(pair));
+		return this->emplace_unique_hint(iterator(this->items.get() + cur_index), std::move(pair));
 	}
 
 	iterator find(const Key& key) noexcept(IndexNothrow::value) {
 		auto [contains, index] = this->index_of(key);
 		if (contains) {
-			return iterator(this->items + index);
+			return iterator(this->items.get() + index);
 		} else {
 			return this->end();
 		}
@@ -454,7 +449,7 @@ public:
 	const_iterator find(const Key& key) const noexcept(IndexNothrow::value) {
 		auto [contains, index] = this->index_of(key);
 		if (contains) {
-			return const_iterator(this->items + index);
+			return const_iterator(this->items.get() + index);
 		} else {
 			return this->cend();
 		}
@@ -525,19 +520,18 @@ public:
 	}
 
 	void clear() noexcept(ItemNothrowDestructible::value) {
-		delete[] this->items;
 		this->capacity = this->len = 0;
 		this->items = nullptr;
 	}
 
 	void swap(HashTable<Key, T>& other) noexcept {
-		auto items = this->items;
+		auto items = std::move(this->items);
 		auto capacity = this->capacity;
 		auto len = this->len;
-		this->items = other.items;
+		this->items = std::move(other.items);
 		this->capacity = other.capacity;
 		this->len = other.len;
-		other.items = items;
+		other.items = std::move(items);
 		other.capacity = capacity;
 		other.len = len;
 	}
@@ -553,22 +547,22 @@ public:
 	}
 
 	iterator begin() {
-		return iterator(this->items, this->items + this->capacity);
+		return iterator(this->items.get(), this->items.get() + this->capacity);
 	}
 	iterator end() {
-		return iterator(this->items + this->capacity);
+		return iterator(this->items.get() + this->capacity);
 	}
 	const_iterator begin() const {
-		return const_iterator(this->items, this->items + this->capacity);
+		return const_iterator(this->items.get(), this->items.get() + this->capacity);
 	}
 	const_iterator end() const {
-		return const_iterator(this->items + this->capacity);
+		return const_iterator(this->items.get() + this->capacity);
 	}
 	const_iterator cbegin() const {
-		return const_iterator(this->items, this->items + this->capacity);
+		return const_iterator(this->items.get(), this->items.get() + this->capacity);
 	}
 	const_iterator cend() const {
-		return const_iterator(this->items + this->capacity);
+		return const_iterator(this->items.get() + this->capacity);
 	}
 };
 template<class Key, class T>
