@@ -89,16 +89,25 @@ private:
 
 	// `new_cap` must be a power of 2.
 	void reserve_exact(size_t old_cap, size_t new_cap) noexcept(HashNothrow::value && ItemNothrowMove::value) {
-		HtItem* old_items = this->items;
 		HtItem* new_items = new HtItem[new_cap]{};
-		for (size_t i = 0; i < old_cap; i++) {
-			if (old_items[i]) {
-				HashTable::inner_insert(new_items, new_cap, std::move((*old_items[i]).first), std::move((*old_items[i]).second));
+		try {
+			for (size_t i = 0; i < old_cap; i++) {
+				if (this->items[i]) {
+					HashTable::inner_insert(
+						new_items,
+						new_cap,
+						std::move((*this->items[i]).first),
+						std::move((*this->items[i]).second)
+					);
+				}
 			}
+		} catch (...) {
+			delete[] new_items;
+			throw;
 		}
+		delete[] this->items;
 		this->items = new_items;
 		this->capacity = new_cap;
-		delete[] old_items;
 	}
 
 public:
@@ -203,17 +212,22 @@ public:
 		this->capacity = other.capacity;
 		this->len = other.len;
 		this->items = new HtItem[other.capacity]{};
-		for (size_t i = 0; i < other.capacity; i++) {
-			if (other.items[i]) {
-				this->items[i].emplace(other.items[i].key, other.items[i].value);
+		try {
+			for (size_t i = 0; i < other.capacity; i++) {
+				if (other.items[i]) {
+					this->items[i].emplace(other.items[i].first, other.items[i].second);
+				}
 			}
+		} catch (...) {
+			delete[] this->items;
+			throw;
 		}
 	}
 	// Move constructor
 	HashTable(HashTable&& other) noexcept {
 		this->capacity = other.capacity;
 		this->len = other.len;
-		this->items = std::move(other.items);
+		this->items = other.items;
 		other.capacity = other.len = 0;
 		other.items = nullptr;
 	}
@@ -222,23 +236,28 @@ public:
 	}
 
 	// Copy assignment
-	HashTable& operator=(const HashTable& other) noexcept(ItemNothrowCopy::value) {
+	HashTable& operator=(const HashTable& other) noexcept(ItemNothrowCopy::value && ItemNothrowDestructible::value) {
+		HtItem* new_items = new HtItem[other.capacity]{};
+		try {
+			for (size_t i = 0; i < other.capacity; i++) {
+				if (other.items[i]) {
+					new_items[i].emplace(other.items[i].first, other.items[i].second);
+				}
+			}
+		} catch (...) {
+			delete[] new_items;
+			throw;
+		}
 		delete[] this->items;
-
 		this->capacity = other.capacity;
 		this->len = other.len;
-		this->items = new HtItem[other.capacity];
-		for (size_t i = 0; i < other.capacity; i++) {
-			if (other.items[i]) {
-				this->items[i].emplace(other.items[i].key, other.items[i].value);
-			}
-		}
+		this->items = new_items;
 	}
 	// Move assignment
 	HashTable& operator=(HashTable&& other) noexcept {
 		this->capacity = other.capacity;
 		this->len = other.len;
-		this->items = std::move(other.items);
+		this->items = other.items;
 		other.capacity = other.len = 0;
 		other.items = nullptr;
 	}
@@ -259,6 +278,9 @@ public:
 		return this->index_of(key, drop) ? 1 : 0;
 	}
 
+	// because this specifies only a minimum capacity (without an upper
+	// bound), it never lowers capacity, assuming that if that many items
+	// were ever allocated, that many may be allocated again later
 	void reserve(size_t min_capacity) noexcept(HashNothrow::value && ItemNothrowMove::value) {
 		size_t old_cap = this->capacity;
 		if (min_capacity <= old_cap) {
@@ -413,7 +435,7 @@ public:
 	}
 	size_t erase(const Key& key) noexcept(IndexNothrow::value && ItemNothrowDestructible::value) {
 		size_t index;
-		if (this->index_of(std::move(key), index)) {
+		if (this->index_of(key, index)) {
 			this->items[index].reset();
 			this->len--;
 			return 1;
