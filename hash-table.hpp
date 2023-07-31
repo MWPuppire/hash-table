@@ -326,14 +326,14 @@ public:
 	std::pair<iterator, bool> insert(const Key& key, const T& value) noexcept(IndexNothrow::value && ItemNothrowMove::value && ItemNothrowCopy::value) {
 		size_t cur_index;
 		if (this->index_of(key, cur_index)) {
-			return std::make_pair(this->end(), false);
+			return std::make_pair(iterator(this->items + cur_index), false);
 		}
 		return this->insert_unique(key, value);
 	}
 	std::pair<iterator, bool> insert(Key&& key, T&& value) noexcept(IndexNothrow::value && ItemNothrowMove::value) {
 		size_t cur_index;
 		if (this->index_of(key, cur_index)) {
-			return std::make_pair(this->end(), false);
+			return std::make_pair(iterator(this->items + cur_index), false);
 		}
 		return this->insert_unique(std::move(key), std::move(value));
 	}
@@ -341,7 +341,7 @@ public:
 		size_t cur_index;
 		if (this->index_of(key, cur_index)) {
 			(*this->items[cur_index]).second = T{value};
-			return std::make_pair(this->end(), false);
+			return std::make_pair(iterator(this->items + cur_index), false);
 		}
 		return this->insert_unique(key, value);
 	}
@@ -349,7 +349,7 @@ public:
 		size_t cur_index;
 		if (this->index_of(key, cur_index)) {
 			(*this->items[cur_index]).second = std::move(value);
-			return std::make_pair(this->end(), false);
+			return std::make_pair(iterator(this->items + cur_index), false);
 		}
 		return this->insert_unique(std::move(key), std::move(value));
 	}
