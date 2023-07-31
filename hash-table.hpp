@@ -103,7 +103,7 @@ private:
 				return std::make_pair(true, index);
 			}
 			index = (index + 1) & (cap - 1);
-			if (attempts > this->len) {
+			if (attempts > this->capacity) {
 				return std::make_pair(false, index);
 			}
 		}
