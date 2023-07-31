@@ -7,12 +7,12 @@
 #include "hash-table.hpp"
 
 TEST_CASE("new map is empty") {
-	REQUIRE(HashTable<int>().empty());
-	REQUIRE(HashTable<int>().max_size() == 0);
+	REQUIRE(HashTable<std::string, int>().empty());
+	REQUIRE(HashTable<std::string, int>().max_size() == 0);
 }
 
 TEST_CASE("keys added can be retrieved") {
-	HashTable<int> x;
+	HashTable<std::string, int> x;
 	x.insert("foo", 3);
 	REQUIRE((*x.find("foo")).second == 3);
 	REQUIRE(x["foo"] == 3);
@@ -22,7 +22,7 @@ TEST_CASE("keys added can be retrieved") {
 }
 
 TEST_CASE("can reassign to keys") {
-	HashTable<int> x;
+	HashTable<std::string, int> x;
 	x.insert("foo", 3);
 	REQUIRE((*x.find("foo")).second == 3);
 	x.insert_or_assign("foo", 42);
@@ -32,7 +32,7 @@ TEST_CASE("can reassign to keys") {
 }
 
 TEST_CASE("keys can be removed") {
-	HashTable<int> x;
+	HashTable<std::string, int> x;
 	x.insert("foo", 42);
 	REQUIRE((*x.find("foo")).second == 42);
 	x.erase("foo");
@@ -42,7 +42,7 @@ TEST_CASE("keys can be removed") {
 }
 
 TEST_CASE("many keys can be handled") {
-	HashTable<int> x;
+	HashTable<std::string, int> x;
 	std::ostringstream key_stream;
 	for (int i = 0; i < 1000; i++) {
 		key_stream.str("");
@@ -55,7 +55,7 @@ TEST_CASE("many keys can be handled") {
 }
 
 TEST_CASE("can resize tables") {
-	HashTable<int> x;
+	HashTable<std::string, int> x;
 	x.reserve(3);
 	size_t current = x.max_size();
 	REQUIRE(current >= 3);
@@ -64,7 +64,7 @@ TEST_CASE("can resize tables") {
 }
 
 TEST_CASE("can iterate over key/value pairs") {
-	HashTable<int> x;
+	HashTable<std::string, int> x;
 	std::ostringstream key_stream;
 	for (int i = 0; i < 1000; i++) {
 		key_stream.str("");
