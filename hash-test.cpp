@@ -35,7 +35,7 @@ TEST_CASE("keys can be removed") {
 	HashTable<int> x;
 	x.insert("foo", 42);
 	REQUIRE((*x.find("foo")).second == 42);
-	x.remove("foo");
+	x.erase("foo");
 	REQUIRE(!x.contains("foo"));
 	x.insert("foo", 255);
 	REQUIRE((*x.find("foo")).second == 255);
