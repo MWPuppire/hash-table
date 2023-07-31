@@ -1,6 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <string>
 #include <sstream>
+#include <iostream>
 
 #include "hash-table.hpp"
 
@@ -23,7 +25,7 @@ TEST_CASE("can reassign to keys") {
 	HashTable<int> x;
 	x.insert("foo", 3);
 	REQUIRE(x.find("foo") == 3);
-	x.insert("foo", 42);
+	x.insert_or_assign("foo", 42);
 	REQUIRE(x.find("foo") == 42);
 	x["foo"] = 255;
 	REQUIRE(x.find("foo") == 255);
@@ -59,4 +61,22 @@ TEST_CASE("can resize tables") {
 	REQUIRE(current >= 3);
 	x.reserve(current * 2);
 	REQUIRE(x.max_size() > current);
+}
+
+TEST_CASE("can iterate over key/value pairs") {
+	HashTable<int> x;
+	std::ostringstream key_stream;
+	for (int i = 0; i < 1000; i++) {
+		key_stream.str("");
+		key_stream << "key" << i;
+		x.insert_or_assign(key_stream.str(), i);
+	}
+	size_t pairs = 0;
+	for (const auto &pair : x) {
+		const auto &key = pair.first;
+		REQUIRE(key.substr(0, 3) == "key");
+		REQUIRE(pair.second == std::stoi(key.substr(3)));
+		pairs++;
+	}
+	REQUIRE(pairs == 1000);
 }

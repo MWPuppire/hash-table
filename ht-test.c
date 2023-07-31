@@ -28,6 +28,10 @@ int main(int argc, char *argv[]) {
 	ht_insert(&table, "hello", "Steve");
 	assert(strncmp("Steve", ht_search(&table, "hello"), 5) == 0);
 
+	// correctly identifies missing keys
+	assert(!ht_contains(&table, "bogus key"));
+	assert(!ht_contains(&table, "missing"));
+
 	// can resize tables
 	size_t old_cap = table.capacity;
 	ht_resize(&table, old_cap + 1);
