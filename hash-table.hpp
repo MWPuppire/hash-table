@@ -18,10 +18,17 @@ public:
 	using value_type = std::pair<const Key, T>;
 	using size_type = size_t;
 	using difference_type = ptrdiff_t;
+	using hasher = Hash;
+	using key_equal = KeyEqual;
+	using allocator_type = std::allocator<std::pair<const Key, T>>;
 	using reference = value_type&;
 	using const_reference = const value_type&;
+	using pointer = value_type*;
+	using const_pointer = const value_type*;
 	class iterator;
 	class const_iterator;
+	using local_iterator = iterator;
+	using const_local_iterator = const_iterator;
 private:
 	using HtItem = std::optional<std::pair<const Key, T>>;
 
@@ -307,6 +314,10 @@ public:
 		return *this;
 	}
 
+	allocator_type get_allocator() const noexcept {
+		return allocator_type{};
+	}
+
 	bool operator==(const HashTable& other) const noexcept(IndexNothrow::value && std::is_nothrow_invocable_r<bool, decltype(std::declval<T>() == std::declval<T>()), const T&, const T&>::value) {
 		if (this->len != other.len) {
 			return false;
@@ -369,6 +380,16 @@ public:
 			return;
 		}
 		this->reserve_exact(old_cap, new_cap);
+	}
+
+	void rehash(size_t min_capacity) noexcept(HashNothrow::value && ItemNothrowMove::value) {
+		size_t old_cap = this->capacity;
+		if (min_capacity > old_cap) {
+			return this->reserve(min_capacity);
+		} else {
+			// to force a rehashing without changing capacity
+			this->reserve_exact(old_cap, old_cap);
+		}
 	}
 
 	std::pair<iterator, bool> insert(const Key& key, const T& value) noexcept(IndexNothrow::value && ItemNothrowMove::value && ItemNothrowCopy::value) {
@@ -454,7 +475,10 @@ public:
 			return this->cend();
 		}
 	}
-	T& find_or_insert(const Key& key) noexcept(IndexNothrow::value && ItemNothrowDefault::value) {
+	T& find_or_insert(const Key& key) noexcept(IndexNothrow::value && std::is_nothrow_copy_constructible<Key>::value && std::is_nothrow_move_constructible<Key>::value && ItemNothrowDefault::value) {
+		return this->find_or_insert(Key{key});
+	}
+	T& find_or_insert(Key&& key) noexcept(IndexNothrow::value && std::is_nothrow_move_constructible<Key>::value && ItemNothrowDefault::value) {
 		if (this->capacity == 0) {
 			this->reserve_exact(0, HashTable::INITIAL_CAPACITY);
 		}
@@ -463,13 +487,16 @@ public:
 			return (*this->items[index]).second;
 		} else {
 			this->len++;
-			this->items[index].emplace(key, T{});
+			this->items[index].emplace(std::move(key), T{});
 			return (*this->items[index]).second;
 		}
 	}
 
 	T& operator[](const Key& key) noexcept(IndexNothrow::value && ItemNothrowDefault::value) {
 		return this->find_or_insert(key);
+	}
+	T& operator[](Key&& key) noexcept(IndexNothrow::value && ItemNothrowDefault::value) {
+		return this->find_or_insert(std::move(key));
 	}
 
 	T& at(const Key& key) {
@@ -486,6 +513,25 @@ public:
 			return (*this->items[index]).second;
 		} else {
 			throw std::out_of_range("Key doesn't exist");
+		}
+	}
+
+	std::pair<iterator, iterator> equal_range(const Key& key) {
+		auto [contains, index] = this->index_of(key);
+		if (contains) {
+			iterator out(this->items.get() + index);
+			return std::make_pair(out, out);
+		} else {
+			return std::make_pair(this->end(), this->end());
+		}
+	}
+	std::pair<const_iterator, const_iterator> equal_range(const Key& key) const {
+		auto [contains, index] = this->index_of(key);
+		if (contains) {
+			const_iterator out(this->items.get() + index);
+			return std::make_pair(out, out);
+		} else {
+			return std::make_pair(this->cend(), this->cend());
 		}
 	}
 
@@ -546,28 +592,98 @@ public:
 		return this->capacity;
 	}
 
-	iterator begin() {
+	iterator begin() noexcept {
 		return iterator(this->items.get(), this->items.get() + this->capacity);
 	}
-	iterator end() {
+	iterator end() noexcept {
 		return iterator(this->items.get() + this->capacity);
 	}
-	const_iterator begin() const {
+	const_iterator begin() const noexcept {
 		return const_iterator(this->items.get(), this->items.get() + this->capacity);
 	}
-	const_iterator end() const {
+	const_iterator end() const noexcept {
 		return const_iterator(this->items.get() + this->capacity);
 	}
-	const_iterator cbegin() const {
+	const_iterator cbegin() const noexcept {
 		return const_iterator(this->items.get(), this->items.get() + this->capacity);
 	}
-	const_iterator cend() const {
+	const_iterator cend() const noexcept {
 		return const_iterator(this->items.get() + this->capacity);
+	}
+
+	local_iterator begin(size_t n) noexcept {
+		if (n == 0) {
+			return this->begin();
+		} else {
+			return this->end();
+		}
+	}
+	local_iterator end(size_t n) noexcept {
+		return this->end();
+	}
+	const_local_iterator begin(size_t n) const noexcept {
+		if (n == 0) {
+			return this->cbegin();
+		} else {
+			return this->cend();
+		}
+	}
+	const_local_iterator end(size_t n) const noexcept {
+		return this->cend();
+	}
+	const_local_iterator cbegin(size_t n) const noexcept {
+		if (n == 0) {
+			return this->cbegin();
+		} else {
+			return this->cend();
+		}
+	}
+	const_local_iterator cend(size_t n) const noexcept {
+		return this->cend();
+	}
+
+	size_t bucket_count() const noexcept {
+		return 1;
+	}
+	size_t max_bucket_count() const noexcept {
+		return 1;
+	}
+	float load_factor() const noexcept {
+		return (float) this->len;
+	}
+	float max_load_factor() const noexcept {
+		return (float) ((size_t) -1);
+	}
+	void max_load_factor(float ml) noexcept {
+		(void) ml;
+	}
+
+	hasher hash_function() const noexcept(std::is_nothrow_default_constructible<hasher>::value) {
+		return hasher{};
+	}
+	key_equal key_eq() const noexcept(std::is_nothrow_default_constructible<key_equal>::value) {
+		return key_equal{};
 	}
 };
-template<class Key, class T>
-void swap(HashTable<Key, T>& h1, HashTable<Key, T>& h2) {
-	h1.swap(h2);
+
+namespace std {
+	template<class Key, class T>
+	void swap(HashTable<Key, T>& h1, HashTable<Key, T>& h2) {
+		h1.swap(h2);
+	}
+
+	template<class Key, class T, class Pred>
+	size_t erase_if(HashTable<Key, T>& c, Pred pred) {
+		auto old_size = c.size();
+		for (auto i = c.begin(), last = c.end(); i != last;) {
+			if (pred(*i)) {
+				i = c.erase(i);
+			} else {
+				++i;
+			}
+		}
+		return old_size - c.size();
+	}
 }
 
 template<class Key, class T>
