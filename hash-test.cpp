@@ -14,31 +14,31 @@ TEST_CASE("new map is empty") {
 TEST_CASE("keys added can be retrieved") {
 	HashTable<int> x;
 	x.insert("foo", 3);
-	REQUIRE(x.find("foo") == 3);
+	REQUIRE((*x.find("foo")).second == 3);
 	REQUIRE(x["foo"] == 3);
 	x["bar"] = 42;
-	REQUIRE(x.find("bar") == 42);
+	REQUIRE((*x.find("bar")).second == 42);
 	REQUIRE(x.size() == 2);
 }
 
 TEST_CASE("can reassign to keys") {
 	HashTable<int> x;
 	x.insert("foo", 3);
-	REQUIRE(x.find("foo") == 3);
+	REQUIRE((*x.find("foo")).second == 3);
 	x.insert_or_assign("foo", 42);
-	REQUIRE(x.find("foo") == 42);
+	REQUIRE((*x.find("foo")).second == 42);
 	x["foo"] = 255;
-	REQUIRE(x.find("foo") == 255);
+	REQUIRE((*x.find("foo")).second == 255);
 }
 
 TEST_CASE("keys can be removed") {
 	HashTable<int> x;
 	x.insert("foo", 42);
-	REQUIRE(x.find("foo") == 42);
+	REQUIRE((*x.find("foo")).second == 42);
 	x.remove("foo");
 	REQUIRE(!x.contains("foo"));
 	x.insert("foo", 255);
-	REQUIRE(x.find("foo") == 255);
+	REQUIRE((*x.find("foo")).second == 255);
 }
 
 TEST_CASE("many keys can be handled") {
@@ -49,8 +49,8 @@ TEST_CASE("many keys can be handled") {
 		key_stream << "key" << i;
 		x.insert(key_stream.str(), i);
 	}
-	REQUIRE(x.find("key0") == 0);
-	REQUIRE(x.find("key999") == 999);
+	REQUIRE((*x.find("key0")).second == 0);
+	REQUIRE((*x.find("key999")).second == 999);
 	REQUIRE(x.size() == 1000);
 }
 
