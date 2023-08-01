@@ -373,7 +373,7 @@ public:
 		return *this;
 	}
 	// Move assignment
-	HashTable& operator=(HashTable&& other) noexcept(HashEqualNothrowMove::value) {
+	HashTable& operator=(HashTable&& other) noexcept(ItemNothrowDestructible::value && HashEqualNothrowMove::value && HashEqualNothrowDestructible::value) {
 		if (this == &other) {
 			return *this;
 		}
@@ -384,6 +384,34 @@ public:
 		this->cmp = std::move(other.cmp);
 		other.capacity = other.len = 0;
 		other.items = nullptr;
+		return *this;
+	}
+	// assign from initializer list
+	HashTable& operator=(std::initializer_list<value_type> ilist) noexcept(ItemNothrowMove::value && ItemNothrowDestructible::value) {
+		// to keep it below the 75% threshold
+		if (ilist.size() + (ilist.size() >> 1) > this->capacity) {
+			// capacity must always be a power of 2
+#if __cplusplus >= 202002L
+			size_t new_cap = std::bit_ceil(ilist.size() + (ilist.size() >> 1));
+#else
+			size_t new_cap = HashTable::bit_ceil(ilist.size() + (ilist.size() >> 1));
+#endif
+			this->reserve_exact(this->capacity, new_cap);
+		}
+		this->len = 0;
+		this->items = std::make_unique<HtItem[]>(this->capacity);
+		for (auto item : std::move(ilist)) {
+			auto [contains, index] = this->index_of(item.first);
+			if (contains && this->cmp((*this->items[index]).first, item.first)) {
+				this->items[index].emplace(std::move(item));
+			} else if (!this->items[index].has_value()) {
+				this->len++;
+				this->items[index].emplace(std::move(item));
+			} else {
+				this->len++;
+				HashTable::inner_insert(this->items, this->capacity, std::move(item), this->hashf);
+			}
+		}
 		return *this;
 	}
 
@@ -475,9 +503,9 @@ public:
 		// 1.5x size due to the 75% capacity limit (to avoid potentially
 		// double-reserving).
 #if __cplusplus >= 202002L
-		size_t list_size_rounded = std::bit_ceil((ilist.size() + ilist.size()) >> 1);
+		size_t list_size_rounded = std::bit_ceil(ilist.size() + (ilist.size() >> 1));
 #else
-		size_t list_size_rounded = HashTable::bit_ceil((ilist.size() + ilist.size()) >> 1);
+		size_t list_size_rounded = HashTable::bit_ceil(ilist.size() + (ilist.size() >> 1));
 #endif
 		if (this->capacity == 0) {
 			this->reserve_exact(0, std::max(HashTable::INITIAL_CAPACITY, list_size_rounded));

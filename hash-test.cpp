@@ -173,7 +173,7 @@ TEST_CASE("swap moves keys and values") {
 	REQUIRE(y["a"] == 3);
 }
 
-TEST_CASE("construct from initializer list") {
+TEST_CASE("construct and assign from initializer list") {
 	HashTable<std::string, int> x{
 		{"a", 1},
 		{"b", 2},
@@ -184,6 +184,18 @@ TEST_CASE("construct from initializer list") {
 	REQUIRE(x.at("b") == 2);
 	REQUIRE(x.at("c") == 3);
 	REQUIRE(x.at("d") == 4);
+	REQUIRE(x.size() == 4);
+	x = {
+		{"w", 23},
+		{"x", 24},
+		{"y", 25},
+		{"z", 26},
+	};
+	REQUIRE(!x.contains("a"));
+	REQUIRE(x.at("w") == 23);
+	REQUIRE(x.at("x") == 24);
+	REQUIRE(x.at("y") == 25);
+	REQUIRE(x.at("z") == 26);
 	REQUIRE(x.size() == 4);
 }
 
