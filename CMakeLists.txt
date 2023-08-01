@@ -26,3 +26,8 @@ if(CMAKE_BUILD_TYPE MATCHES "Debug" AND Catch2_FOUND)
   target_include_directories(ht_test PRIVATE ./)
   add_test(NAME run_ht_test COMMAND ht_test)
 endif(CMAKE_BUILD_TYPE MATCHES "Debug" AND Catch2_FOUND)
+
+find_package(Doxygen)
+if(Doxygen_FOUND)
+	doxygen_add_docs(ht_docs ./ht-hash.h)
+endif(Doxygen_FOUND)

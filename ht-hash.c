@@ -161,7 +161,7 @@ void ht_shrink_to_fit(ht_hash_table *ht) {
 }
 
 bool ht_insertn(ht_hash_table *ht, const char *key, size_t key_len, const char *value, size_t val_len) {
-	size_t cur_index;
+	size_t cur_index = 0;
 	bool contains = ht_find(ht, key, key_len, &cur_index);
 	if (contains) {
 		char *val_clone = strndup(value, val_len);
@@ -188,6 +188,8 @@ bool ht_insertn_unique(ht_hash_table *ht, const char *key, size_t key_len, const
 	if (__builtin_expect(cap == 0, 0)) {
 		ht->items = calloc(HT_INITIAL_CAPACITY, sizeof(struct _ht_item));
 		if (__builtin_expect(ht->items == NULL, 0)) {
+			free(key_clone);
+			free(val_clone);
 			return false;
 		}
 		cap = ht->capacity = HT_INITIAL_CAPACITY;
@@ -207,7 +209,7 @@ bool ht_insertn_unique(ht_hash_table *ht, const char *key, size_t key_len, const
 }
 
 bool ht_insert(ht_hash_table *ht, const char *key, const char *value) {
-	size_t key_len = strlen(key), cur_index;
+	size_t key_len = strlen(key), cur_index = 0;
 	bool contains = ht_find(ht, key, key_len, &cur_index);
 	if (contains) {
 		char *val_clone;
@@ -226,7 +228,7 @@ bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value) {
 }
 
 char *ht_searchn(const ht_hash_table *ht, const char *key, size_t key_len) {
-	size_t index;
+	size_t index = 0;
 	// keys being searched for probably exist
 	if (__builtin_expect(ht_find(ht, key, key_len, &index), 1)) {
 		return ht->items[index].value;
@@ -247,7 +249,7 @@ bool ht_removen(ht_hash_table *ht, const char *key, size_t key_len) {
 }
 
 char *ht_removen_get(ht_hash_table *ht, const char *key, size_t key_len) {
-	size_t index;
+	size_t index = 0;
 	// keys being removed probably exist
 	if (__builtin_expect(ht_find(ht, key, key_len, &index), 1)) {
 		free(ht->items[index].key);
