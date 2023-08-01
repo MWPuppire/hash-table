@@ -12,7 +12,7 @@ TEST_CASE("new map is empty") {
 
 TEST_CASE("keys added can be retrieved") {
 	HashTable<std::string, int> x;
-	x.insert("foo", 3);
+	x.insert({"foo", 3});
 	REQUIRE((*x.find("foo")).second == 3);
 	REQUIRE(x["foo"] == 3);
 	x["bar"] = 42;
@@ -22,7 +22,7 @@ TEST_CASE("keys added can be retrieved") {
 
 TEST_CASE("can reassign to keys") {
 	HashTable<std::string, int> x;
-	x.insert("foo", 3);
+	x.insert({"foo", 3});
 	REQUIRE((*x.find("foo")).second == 3);
 	x.insert_or_assign("foo", 42);
 	REQUIRE((*x.find("foo")).second == 42);
@@ -32,11 +32,11 @@ TEST_CASE("can reassign to keys") {
 
 TEST_CASE("keys can be removed") {
 	HashTable<std::string, int> x;
-	x.insert("foo", 42);
+	x.insert({"foo", 42});
 	REQUIRE((*x.find("foo")).second == 42);
 	x.erase("foo");
 	REQUIRE(!x.contains("foo"));
-	x.insert("foo", 255);
+	x.insert({"foo", 255});
 	REQUIRE((*x.find("foo")).second == 255);
 }
 
@@ -45,7 +45,7 @@ TEST_CASE("many keys can be handled") {
 	for (int i = 0; i < 1000; i++) {
 		std::string key = "key";
 		key += std::to_string(i);
-		x.insert(key, i);
+		x.insert({key, i});
 	}
 	REQUIRE((*x.find("key0")).second == 0);
 	REQUIRE((*x.find("key999")).second == 999);
@@ -171,4 +171,40 @@ TEST_CASE("swap moves keys and values") {
 	REQUIRE(!y.contains("d"));
 	REQUIRE(x["a"] == 9);
 	REQUIRE(y["a"] == 3);
+}
+
+TEST_CASE("construct from initializer list") {
+	HashTable<std::string, int> x{
+		{"a", 1},
+		{"b", 2},
+		{"c", 3},
+		{"d", 4},
+	};
+	REQUIRE(x.at("a") == 1);
+	REQUIRE(x.at("b") == 2);
+	REQUIRE(x.at("c") == 3);
+	REQUIRE(x.at("d") == 4);
+	REQUIRE(x.size() == 4);
+}
+
+template<typename T>
+struct compare_equal {
+	constexpr bool operator()(const T &lhs, const T &rhs) const {
+		return true;
+	}
+};
+template<typename T>
+struct hash_one {
+	size_t operator()(const T& val) const {
+		return 1;
+	}
+};
+TEST_CASE("custom comparator function") {
+	HashTable<std::string, int, hash_one<std::string>, compare_equal<std::string>> x;
+	x.insert_or_assign("a", 3);
+	x.insert_or_assign("b", 4);
+	x.insert_or_assign("c", 5);
+	REQUIRE(x.size() == 1);
+	REQUIRE(x.at("a") == 5);
+	REQUIRE(x.at("d") == 5);
 }

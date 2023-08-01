@@ -1,7 +1,9 @@
+#include <algorithm>
 #if __cplusplus >= 202002L
 #	include <bit>
 #endif
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -282,16 +284,45 @@ public:
 		this->cmp = KeyEqual{};
 	}
 	HashTable(size_t bucket_count, const Hash& hash = Hash{}, const KeyEqual& cmp = KeyEqual{}, const allocator_type& alloc = allocator_type{}) {
-		// capacity must always be a power of 2
+		if (bucket_count == 0) {
+			this->capacity = 0;
+			this->items = nullptr;
+		} else {
+			// capacity must always be a power of 2
 #if __cplusplus >= 202002L
-		this->capacity = std::bit_ceil(bucket_count);
+			this->capacity = std::bit_ceil(bucket_count);
 #else
-		this->capacity = HashTable::bit_ceil(bucket_count);
+			this->capacity = HashTable::bit_ceil(bucket_count);
 #endif
+			this->items = std::make_unique<HtItem[]>(this->capacity);
+		}
 		this->len = 0;
-		this->items = std::make_unique<HtItem[]>(bucket_count);
 		this->hashf = Hash{hash};
 		this->cmp = KeyEqual{cmp};
+	}
+	HashTable(std::initializer_list<value_type> init, size_t bucket_count = 0, const Hash& hash = Hash{}, const KeyEqual& cmp = KeyEqual{}, const allocator_type& alloc = allocator_type{}) {
+		// capacity must always be a power of 2
+#if __cplusplus >= 202002L
+		this->capacity = std::bit_ceil(std::max(bucket_count, init.size()));
+#else
+		this->capacity = HashTable::bit_ceil(std::max(bucket_count, init.size()));
+#endif
+		this->len = 0;
+		this->items = std::make_unique<HtItem[]>(this->capacity);
+		this->hashf = Hash{hash};
+		this->cmp = KeyEqual{cmp};
+		for (auto item : std::move(init)) {
+			auto [contains, index] = this->index_of(item.first);
+			if (contains && this->cmp((*this->items[index]).first, item.first)) {
+				this->items[index].emplace(std::move(item));
+			} else if (!this->items[index].has_value()) {
+				this->len++;
+				this->items[index].emplace(std::move(item));
+			} else {
+				this->len++;
+				HashTable::inner_insert(this->items, this->capacity, std::move(item), this->hashf);
+			}
+		}
 	}
 	// Copy constructor
 	HashTable(const HashTable& other) noexcept(ItemNothrowCopy::value && HashEqualNothrowCopy::value) {
@@ -434,11 +465,40 @@ public:
 		}
 	}
 
-	std::pair<iterator, bool> insert(const Key& key, const T& value) noexcept(IndexNothrow::value && ItemNothrowMove::value && ItemNothrowCopy::value) {
-		return this->emplace(Key{key}, T{value});
+	std::pair<iterator, bool> insert(const value_type& value) noexcept(IndexNothrow::value && ItemNothrowMove::value && ItemNothrowCopy::value) {
+		return this->emplace(value_type{value});
 	}
-	std::pair<iterator, bool> insert(Key&& key, T&& value) noexcept(IndexNothrow::value && ItemNothrowMove::value) {
-		return this->emplace(std::move(key), std::move(value));
+	std::pair<iterator, bool> insert(value_type&& value) noexcept(IndexNothrow::value && ItemNothrowMove::value) {
+		return this->emplace(std::move(value));
+	}
+	void insert(std::initializer_list<value_type> ilist) noexcept(IndexNothrow::value && ItemNothrowMove::value) {
+		// 1.5x size due to the 75% capacity limit (to avoid potentially
+		// double-reserving).
+#if __cplusplus >= 202002L
+		size_t list_size_rounded = std::bit_ceil((ilist.size() + ilist.size()) >> 1);
+#else
+		size_t list_size_rounded = HashTable::bit_ceil((ilist.size() + ilist.size()) >> 1);
+#endif
+		if (this->capacity == 0) {
+			this->reserve_exact(0, std::max(HashTable::INITIAL_CAPACITY, list_size_rounded));
+		}
+		size_t cap = this->capacity;
+		// resize on 75% capacity
+		if ((this->len + ilist.size()) << 2 > (cap << 1) + cap) {
+			this->reserve_exact(cap, std::max(cap << 1, list_size_rounded));
+		}
+		for (auto item : std::move(ilist)) {
+			auto [contains, index] = this->index_of(item.first);
+			if (contains && this->cmp((*this->items[index]).first, item.first)) {
+				this->items[index].emplace(std::move(item));
+			} else if (!this->items[index].has_value()) {
+				this->len++;
+				this->items[index].emplace(std::move(item));
+			} else {
+				this->len++;
+				HashTable::inner_insert(this->items, cap, std::move(item), this->hashf);
+			}
+		}
 	}
 	std::pair<iterator, bool> insert_or_assign(const Key& key, const T& value) noexcept(IndexNothrow::value && ItemNothrowMove::value && ItemNothrowCopy::value) {
 		return this->emplace_or_assign(Key{key}, T{value});
