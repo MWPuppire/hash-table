@@ -39,7 +39,9 @@ typedef struct {
 	struct _ht_item *end;
 } ht_iter;
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1), nothrow))
+#endif
 /**
  * \brief Removes all items from `ht`.
  *
@@ -52,7 +54,9 @@ __attribute__((nonnull(1), nothrow))
  */
 void ht_clear(ht_hash_table *ht);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1, 2), nothrow, pure))
+#endif
 /**
  * \brief Tests if `ht` contains `key`, with specified key length.
  *
@@ -64,7 +68,9 @@ __attribute__((nonnull(1, 2), nothrow, pure))
  */
 bool ht_containsn(const ht_hash_table *ht, const char *key, size_t key_len);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1, 2), nothrow, pure))
+#endif
 /**
  * \brief Tests if `ht` contains `key`.
  *
@@ -76,7 +82,9 @@ __attribute__((nonnull(1, 2), nothrow, pure))
  */
 bool ht_contains(const ht_hash_table *ht, const char *key);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1), nothrow))
+#endif
 /**
  * \brief Resizes `ht` to hold at least `min_size` items.
  *
@@ -89,7 +97,9 @@ __attribute__((nonnull(1), nothrow))
  */
 void ht_resize(ht_hash_table *ht, size_t min_size);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1), nothrow))
+#endif
 /**
  * \brief Shrinks `ht` to the smallest size it can be.
  *
@@ -101,7 +111,9 @@ __attribute__((nonnull(1), nothrow))
  */
 void ht_shrink_to_fit(ht_hash_table *ht);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1, 2, 4), nothrow))
+#endif
 /**
  * \brief Inserts `key` holding `value` into `ht`, with specified key and value
  * lengths.
@@ -118,7 +130,9 @@ __attribute__((nonnull(1, 2, 4), nothrow))
  */
 bool ht_insertn(ht_hash_table *ht, const char *key, size_t key_len, const char *value, size_t val_len);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1, 2, 4), nothrow))
+#endif
 /**
  * \brief Inserts `key` holding `value` into `ht`, where `key` didn't exist
  * previously in `ht`, with specified key and value lengths.
@@ -136,7 +150,9 @@ __attribute__((nonnull(1, 2, 4), nothrow))
  */
 bool ht_insertn_unique(ht_hash_table *ht, const char *key, size_t key_len, const char *value, size_t val_len);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1, 2, 3), nothrow))
+#endif
 /**
  * \brief Inserts `key` holding `value` into `ht`.
  *
@@ -151,7 +167,9 @@ __attribute__((nonnull(1, 2, 3), nothrow))
  */
 bool ht_insert(ht_hash_table *ht, const char *key, const char *value);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1, 2, 3), nothrow))
+#endif
 /**
  * \brief Inserts `key` holding `value` into `ht`, where `key` didn't exist
  * previously in `ht`.
@@ -168,7 +186,9 @@ __attribute__((nonnull(1, 2, 3), nothrow))
  */
 bool ht_insert_unique(ht_hash_table *ht, const char *key, const char *value);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1, 2), nothrow, pure))
+#endif
 /**
  * \brief Returns the value associated with `key`, with specified key length.
  *
@@ -181,7 +201,9 @@ __attribute__((nonnull(1, 2), nothrow, pure))
  */
 char *ht_searchn(const ht_hash_table *ht, const char *key, size_t key_len);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1, 2), nothrow, pure))
+#endif
 /**
  * \brief Returns the value associated with `key`.
  *
@@ -193,7 +215,9 @@ __attribute__((nonnull(1, 2), nothrow, pure))
  */
 char *ht_search(const ht_hash_table *ht, const char *key);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1, 2), nothrow))
+#endif
 /**
  * \brief Removes `key` from `ht`, with specified key length.
  *
@@ -208,7 +232,9 @@ __attribute__((nonnull(1, 2), nothrow))
  */
 bool ht_removen(ht_hash_table *ht, const char *key, size_t key_len);
 
- __attribute__((nonnull(1, 2), nothrow, warn_unused_result))
+#ifndef MAKE_DOCS
+__attribute__((nonnull(1, 2), nothrow, warn_unused_result))
+#endif
 /**
  * \brief Removes `key` from `ht` and returns the value, with specified key
  * length.
@@ -223,7 +249,9 @@ bool ht_removen(ht_hash_table *ht, const char *key, size_t key_len);
  */
 char *ht_removen_get(ht_hash_table *ht, const char *key, size_t key_len);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1, 2), nothrow))
+#endif
 /**
  * \brief Removes `key` from `ht`.
  *
@@ -238,7 +266,9 @@ __attribute__((nonnull(1, 2), nothrow))
  */
 bool ht_remove(ht_hash_table *ht, const char *key);
 
- __attribute__((nonnull(1, 2), nothrow, warn_unused_result))
+#ifndef MAKE_DOCS
+__attribute__((nonnull(1, 2), nothrow, warn_unused_result))
+#endif
 /**
  * \brief Removes `key` from `ht` and returns the value.
  *
@@ -252,7 +282,9 @@ bool ht_remove(ht_hash_table *ht, const char *key);
  */
 char *ht_remove_get(ht_hash_table *ht, const char *key);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1), nothrow, pure))
+#endif
 /**
  * \brief Creates an iterator over `ht`.
  *
@@ -267,7 +299,9 @@ __attribute__((nonnull(1), nothrow, pure))
  */
 ht_iter ht_iterator(const ht_hash_table *ht);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1), nothrow))
+#endif
 /**
  * \brief Returns the next key from `iter`.
  *
@@ -278,7 +312,9 @@ __attribute__((nonnull(1), nothrow))
  */
 char *ht_iter_next(ht_iter *iter);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1), nothrow))
+#endif
 /**
  * \brief Gets the next pair from `iter`.
  *
@@ -293,7 +329,9 @@ __attribute__((nonnull(1), nothrow))
  */
 bool ht_iter_next_pair(ht_iter *iter, char **key, char **val);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1), nothrow))
+#endif
 /**
  * \brief Creates a JSON string of `ht`.
  *
@@ -312,7 +350,9 @@ __attribute__((nonnull(1), nothrow))
  */
 size_t ht_json_stringify(const ht_hash_table *ht, char **out);
 
+#ifndef MAKE_DOCS
 __attribute__((nonnull(1), nothrow))
+#endif
 /**
  * \brief Creates a JSON string of `ht`, escaping quotes.
  *

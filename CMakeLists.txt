@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.12)
 project(hashtable VERSION 1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -29,5 +29,6 @@ endif(CMAKE_BUILD_TYPE MATCHES "Debug" AND Catch2_FOUND)
 
 find_package(Doxygen)
 if(Doxygen_FOUND)
+	set(DOXYGEN_PREDEFINED "MAKE_DOCS")
 	doxygen_add_docs(ht_docs ./ht-hash.h)
 endif(Doxygen_FOUND)
