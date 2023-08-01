@@ -337,13 +337,16 @@ __attribute__((nonnull(1), nothrow))
  *
  * Creates a JSON string containing the pairs in `ht` and writes it to `out`,
  * overwriting any existing value. Allocates a buffer to hold it; the caller is
- * responsible for freeing `out`. Returns the number of bytes written.
+ * responsible for freeing `out`. (If `NULL` is passed to `out`, no buffer is
+ * allocated and `out` isn't written to.) Returns the number of bytes written.
  * On a failure, 0 is returned, and `out` isn't changed, nor is any memory
  * allocated. Note that 0 will never be returned in a successful case, since the
  * opening & closing braces ensure a valid JSON string will never be 0 bytes.
- * Note that this function assumes keys and values are valid JSON strings (e.g.
- * they don't contain unescaped quotes or invalid escape sequences), so the
- * function doesn't contain any logic to escape characters.
+ * Note also that this function assumes keys and values are valid JSON strings
+ * (e.g. they don't contain unescaped quotes or invalid escape sequences), so
+ * the function doesn't contain any logic to escape characters. If keys or
+ * values may not hold valid JSON strings, use `ht_json_stringify_escape`
+ * instead.
  *
  * \param ht The table to stringify
  * \param out Where to place the created buffer
@@ -358,7 +361,8 @@ __attribute__((nonnull(1), nothrow))
  *
  * Creates a JSON string containing the pairs in `ht` and writes it to `out`,
  * overwriting any existing value. Allocates a buffer to hold it; the caller is
- * responsible for freeing `out`. Returns the number of bytes written.
+ * responsible for freeing `out`. (If `NULL` is passed to `out`, no buffer is
+ * allocated and `out` isn't written to.) Returns the number of bytes written.
  * On a failure, 0 is returned, and `out` isn't changed, nor is any memory
  * allocated. Note that 0 will never be returned in a successful case, since the
  * opening & closing braces ensure a valid JSON string will never be 0 bytes.
