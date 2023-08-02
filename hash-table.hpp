@@ -115,9 +115,6 @@ private:
 
 	std::pair<bool, size_t> index_of(const Key& key) const noexcept(IndexNothrow::value) {
 		size_t cap = this->capacity;
-		if (cap == 0) {
-			return std::make_pair(false, 0);
-		}
 		size_t index = HashTable::hash(key, cap, this->hashf);
 		size_t attempts = 0;
 		while (this->items[index]) {
@@ -146,7 +143,7 @@ private:
 	template<class... Args>
 	std::pair<iterator, bool> emplace_unique_hint(iterator hint, Args&&... args) noexcept(IndexNothrow::value && ItemNothrowMove::value && std::is_nothrow_invocable<value_type, Args...>::value) {
 		value_type pair(std::forward<Args>(args)...);
-		if (hint != this->end() && (!hint.item->has_value() || this->cmp((*hint).first, pair.first))) {
+		if (hint != this->end() && !hint.item->has_value()) {
 			bool had_value = hint.item->has_value();
 			hint.item->emplace(std::move(pair));
 			if (!had_value) {
@@ -157,9 +154,6 @@ private:
 				}
 			}
 			return std::make_pair(hint, !had_value);
-		}
-		if (this->capacity == 0) {
-			this->reserve_exact(0, HashTable::INITIAL_CAPACITY);
 		}
 		size_t cap = this->capacity;
 		// resize on 75% capacity
@@ -440,10 +434,10 @@ public:
 	}
 
 	bool contains(const Key& key) const noexcept(IndexNothrow::value) {
-		return this->index_of(key).first;
+		return this->capacity > 0 && this->index_of(key).first;
 	}
 	size_t count(const Key& key) const noexcept(IndexNothrow::value) {
-		return this->index_of(key).first ? 1 : 0;
+		return this->capacity > 0 && this->index_of(key).first ? 1 : 0;
 	}
 
 	// Because this specifies only a minimum capacity (without an upper
@@ -555,6 +549,16 @@ public:
 	template<class... Args>
 	std::pair<iterator, bool> emplace(Args&&... args) {
 		value_type pair(std::forward<Args>(args)...);
+		if (this->capacity == 0) {
+			this->reserve_exact(0, HashTable::INITIAL_CAPACITY);
+			this->len++;
+			return HashTable::inner_insert(
+				this->items,
+				HashTable::INITIAL_CAPACITY,
+				std::move(pair),
+				this->hashf
+			);
+		}
 		auto [contains, cur_index] = this->index_of(pair.first);
 		if (contains) {
 			return std::make_pair(iterator(this->items.get() + cur_index), false);
@@ -581,6 +585,16 @@ public:
 	template<class... Args>
 	std::pair<iterator, bool> emplace_or_assign(Args&&... args) {
 		value_type pair(std::forward<Args>(args)...);
+		if (this->capacity == 0) {
+			this->reserve_exact(0, HashTable::INITIAL_CAPACITY);
+			this->len++;
+			return HashTable::inner_insert(
+				this->items,
+				HashTable::INITIAL_CAPACITY,
+				std::move(pair),
+				this->hashf
+			);
+		}
 		auto [contains, cur_index] = this->index_of(pair.first);
 		if (contains) {
 			this->items[cur_index].emplace(std::move(pair));
@@ -590,6 +604,9 @@ public:
 	}
 
 	iterator find(const Key& key) noexcept(IndexNothrow::value) {
+		if (this->capacity == 0) {
+			return this->end();
+		}
 		auto [contains, index] = this->index_of(key);
 		if (contains) {
 			return iterator(this->items.get() + index);
@@ -598,6 +615,9 @@ public:
 		}
 	}
 	const_iterator find(const Key& key) const noexcept(IndexNothrow::value) {
+		if (this->capacity == 0) {
+			return this->end();
+		}
 		auto [contains, index] = this->index_of(key);
 		if (contains) {
 			return const_iterator(this->items.get() + index);
@@ -630,6 +650,9 @@ public:
 	}
 
 	T& at(const Key& key) {
+		if (this->capacity == 0) {
+			throw std::out_of_range("Key doesn't exist");
+		}
 		auto [contains, index] = this->index_of(key);
 		if (contains) {
 			return (*this->items[index]).second;
@@ -638,6 +661,9 @@ public:
 		}
 	}
 	const T& at(const Key& key) const {
+		if (this->capacity == 0) {
+			throw std::out_of_range("Key doesn't exist");
+		}
 		auto [contains, index] = this->index_of(key);
 		if (contains) {
 			return (*this->items[index]).second;
@@ -647,6 +673,9 @@ public:
 	}
 
 	std::pair<iterator, iterator> equal_range(const Key& key) {
+		if (this->capacity == 0) {
+			return std::make_pair(this->end(), this->end());
+		}
 		auto [contains, index] = this->index_of(key);
 		if (contains) {
 			iterator out(this->items.get() + index);
@@ -656,6 +685,9 @@ public:
 		}
 	}
 	std::pair<const_iterator, const_iterator> equal_range(const Key& key) const {
+		if (this->capacity == 0) {
+			return std::make_pair(this->end(), this->end());
+		}
 		auto [contains, index] = this->index_of(key);
 		if (contains) {
 			const_iterator out(this->items.get() + index);
@@ -685,6 +717,9 @@ public:
 		return iterator((HtItem*) last.item, last.end);
 	}
 	size_t erase(const Key& key) noexcept(IndexNothrow::value && ItemNothrowDestructible::value) {
+		if (this->capacity == 0) {
+			return 0;
+		}
 		auto [contains, index] = this->index_of(key);
 		if (contains) {
 			this->items[index].reset();
